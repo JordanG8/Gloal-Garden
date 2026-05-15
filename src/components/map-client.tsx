@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Map, { Marker, NavigationControl, GeolocateControl } from "react-map-gl";
+import Map, { Marker, NavigationControl, GeolocateControl } from "react-map-gl/maplibre";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { Leaf } from "lucide-react";
