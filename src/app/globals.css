@@ -142,3 +142,27 @@
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
   }
 }
+/* Map chrome: warm-toned tiles and themed controls */
+.map-container .maplibregl-canvas {
+  filter: sepia(0.2) hue-rotate(-15deg) saturate(0.85) brightness(0.98);
+}
+
+.maplibregl-ctrl-group {
+  background-color: var(--background) !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.maplibregl-ctrl-icon {
+  filter: grayscale(1) opacity(0.7) !important;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

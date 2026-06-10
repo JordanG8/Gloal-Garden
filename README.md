@@ -1,36 +1,65 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🌱 Global Garden
 
-## Getting Started
+A community map for public food plants. Drop a pin where you planted something edible, and your neighborhood keeps it alive together — watering, photographing, harvesting, and flagging problems.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Live map** of every public plant, with status-colored markers (healthy, needs water, harvest ready, needs attention)
+- **Add plants** by tapping the map — species, nickname, access notes
+- **Care actions**: log watering, photos, harvests, and issue reports; reports flag the plant until someone marks it healthy
+- **Activity feed** per plant showing who did what, when
+- **Status filters** (needs water / harvest ready / critical / freshly planted) and a "near me" button
+- **Accounts** with email + password (NextAuth credentials), contribution stats tracked per user
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Stack
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Next.js (App Router, Server Actions) · Drizzle ORM · Neon Postgres · NextAuth v5 · MapLibre GL + OpenStreetMap tiles · Tailwind CSS v4
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Getting started
 
-## Learn More
+1. **Install dependencies**
 
-To learn more about Next.js, take a look at the following resources:
+   ```bash
+   npm install
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+2. **Configure environment** — copy `.env.example` to `.env` and fill in:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+   - `POSTGRES_URL` — a [Neon](https://neon.tech) Postgres connection string
+   - `AUTH_SECRET` — generate with `npx auth secret`
 
-## Deploy on Vercel
+3. **Create tables and seed demo data**
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   ```bash
+   npm run db:push
+   npm run db:seed
+   ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+   The seed creates a downtown-LA demo garden and a demo account:
+   **demo@globalgarden.app / garden123**
+
+4. **Run**
+
+   ```bash
+   npm run dev
+   ```
+
+   Open [http://localhost:3000](http://localhost:3000). Without a configured database the app still runs, but shows a setup banner and an empty map.
+
+## How status works
+
+A plant's marker color is computed at read time from species data:
+
+- **Needs water** — last watering is older than the species' watering frequency
+- **Harvest ready** — plant age is within a week of the species' days-to-harvest
+- **Needs attention / diseased** — set by issue reports, sticky until someone hits *Mark Healthy*
+- **Growing** — everything else
+
+## Scripts
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build |
+| `npm run db:push` | Push the Drizzle schema to the database |
+| `npm run db:seed` | Seed demo users, species, and plants |
