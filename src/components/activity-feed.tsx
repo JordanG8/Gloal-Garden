@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Droplet, Camera, CheckCircle2, AlertTriangle, Clock, Sprout, HeartPulse } from "lucide-react";
 import type { ObservationEntry } from "@/lib/types";
 import { timeAgo } from "@/lib/format";
@@ -49,7 +50,10 @@ export default function ActivityFeed({ logs }: { logs: ObservationEntry[] | null
               <div className="bg-card border border-border rounded-2xl p-4 shadow-sm w-full">
                 <div className="flex justify-between items-start mb-1 gap-2">
                   <p className="font-medium text-sm text-foreground">
-                    <span className="font-bold">{log.userName}</span> {LOG_LABELS[log.type] ?? log.type}
+                    <Link href={`/gardeners/${log.userId}`} className="font-bold hover:text-primary hover:underline">
+                      {log.userName}
+                    </Link>{" "}
+                    {LOG_LABELS[log.type] ?? log.type}
                     {log.harvestQuantity ? ` · ${log.harvestQuantity}` : ""}
                     {log.diseaseTag ? ` · ${log.diseaseTag}` : ""}
                   </p>

@@ -58,6 +58,9 @@ async function main() {
       await sql`UPDATE plants SET lat = ${lat + jitter}, lng = ${lng + jitter} WHERE id = ${laPlants[i].id}`;
     }
   }
+
+  // Social layer: gardeners, follows, adoptions, feed activity (idempotent).
+  execSync('npx tsx scripts/seed-social.ts', { stdio: 'inherit' });
 }
 
 main().catch((e) => {

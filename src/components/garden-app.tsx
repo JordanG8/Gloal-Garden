@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { MapRef } from "react-map-gl/maplibre";
 import {
-  LocateFixed, Droplet, Sprout, AlertTriangle, Plus, X, LogOut, DatabaseZap,
+  LocateFixed, Droplet, Sprout, AlertTriangle, Plus, X, LogOut, DatabaseZap, Newspaper, UserCircle,
 } from "lucide-react";
 import type { PlantSummary, SessionUser, SpeciesOption } from "@/lib/types";
 import { signOutAction } from "@/lib/auth-actions";
@@ -167,7 +167,16 @@ export default function GardenApp({
           </span>
         </div>
 
-        <div className="pointer-events-auto relative">
+        <div className="pointer-events-auto relative flex items-center gap-2">
+          <Link
+            href="/feed"
+            className="bg-background/90 backdrop-blur-md rounded-full p-1 border border-border shadow-sm flex items-center"
+            aria-label="Community feed"
+          >
+            <span className="w-10 h-10 rounded-full flex items-center justify-center text-primary hover:bg-primary/10 transition">
+              <Newspaper className="w-5 h-5" />
+            </span>
+          </Link>
           <div className="bg-background/90 backdrop-blur-md rounded-full p-1 border border-border shadow-sm flex items-center">
             {user ? (
               <button
@@ -188,8 +197,14 @@ export default function GardenApp({
           </div>
 
           {menuOpen && user && (
-            <div className="absolute right-0 mt-2 w-56 bg-background border border-border rounded-2xl shadow-xl p-2">
+            <div className="absolute right-0 top-full mt-2 w-56 bg-background border border-border rounded-2xl shadow-xl p-2">
               <p className="px-3 py-2 text-sm font-medium text-foreground truncate">{user.name}</p>
+              <Link
+                href={`/gardeners/${user.id}`}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground rounded-xl hover:bg-secondary transition"
+              >
+                <UserCircle className="w-4 h-4" /> My profile
+              </Link>
               <form action={signOutAction}>
                 <button
                   type="submit"

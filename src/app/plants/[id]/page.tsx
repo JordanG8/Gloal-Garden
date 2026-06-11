@@ -7,6 +7,7 @@ import type { Metadata } from "next";
 import type { SessionUser } from "@/lib/types";
 import { daysAgoLabel } from "@/lib/format";
 import CareActions from "@/components/plant-care";
+import { AdoptButton } from "@/components/social-buttons";
 import ActivityFeed from "@/components/activity-feed";
 import PlantHero from "@/components/plant-hero";
 
@@ -46,7 +47,7 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
   const [session, detail] = await Promise.all([auth(), getPlantDetail(plantId)]);
   if (!detail) notFound();
 
-  const { plant, observations } = detail;
+  const { plant, observations, adopters } = detail;
 
   let user: SessionUser | null = null;
   if (session?.user?.id) {
@@ -87,10 +88,13 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Watered</p>
             <p className="font-mono text-sm md:text-base font-bold text-foreground">{daysAgoLabel(plant.lastWateredAt)}</p>
           </div>
-          <div className="bg-secondary/50 rounded-xl p-3 md:p-4 text-center border border-border/50">
+          <Link
+            href={`/gardeners/${plant.plantedById}`}
+            className="bg-secondary/50 rounded-xl p-3 md:p-4 text-center border border-border/50 hover:border-primary/40 hover:bg-secondary transition"
+          >
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Planted by</p>
-            <p className="font-mono text-sm md:text-base font-bold text-foreground truncate px-1">{plant.plantedByName}</p>
-          </div>
+            <p className="font-mono text-sm md:text-base font-bold text-primary truncate px-1">{plant.plantedByName}</p>
+          </Link>
         </div>
 
         {/* Species care facts */}
@@ -120,6 +124,30 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
             )}
           </div>
         )}
+
+        {/* Caretakers */}
+        <div className="flex flex-wrap items-center gap-3 mb-6 bg-secondary/40 border border-border/50 rounded-2xl p-4">
+          <AdoptButton
+            plantId={plant.id}
+            initialAdopted={user !== null && adopters.some((a) => a.id === user.id)}
+            signedIn={user !== null}
+          />
+          {adopters.length > 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Cared for by{" "}
+              {adopters.map((adopter, i) => (
+                <span key={adopter.id}>
+                  {i > 0 && (i === adopters.length - 1 ? " and " : ", ")}
+                  <Link href={`/gardeners/${adopter.id}`} className="font-medium text-primary hover:underline">
+                    {adopter.name}
+                  </Link>
+                </span>
+              ))}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">No caretakers yet — this plant could use a friend.</p>
+          )}
+        </div>
 
         <CareActions plantId={plant.id} status={plant.status} user={user} />
 

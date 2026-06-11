@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { X, MapPin, ChevronUp } from "lucide-react";
 import type { ObservationEntry, PlantSummary, SessionUser } from "@/lib/types";
 import { STATUS_BADGE_CLASSES } from "@/lib/plant-status";
@@ -304,10 +305,13 @@ function PanelContent({
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Watered</p>
             <p className="font-mono text-sm font-bold text-foreground">{daysAgoLabel(plant.lastWateredAt)}</p>
           </div>
-          <div className="bg-secondary/50 rounded-xl p-3 text-center border border-border/50">
+          <Link
+            href={`/gardeners/${plant.plantedById}`}
+            className="bg-secondary/50 rounded-xl p-3 text-center border border-border/50 hover:border-primary/40 transition"
+          >
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Planted by</p>
-            <p className="font-mono text-sm font-bold text-foreground truncate px-1">{plant.plantedByName}</p>
-          </div>
+            <p className="font-mono text-sm font-bold text-primary truncate px-1">{plant.plantedByName}</p>
+          </Link>
         </div>
 
         {(plant.description || plant.accessNotes) && (

@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import { db } from '@/db';
-import { observations, plants, species, users } from '@/db/schema';
+import { adoptions, observations, plants, species, users } from '@/db/schema';
 import { desc, eq, ne } from 'drizzle-orm';
 import { computeStatus } from './plant-status';
 import type { ObservationEntry, PlantSummary, SpeciesOption } from './types';
@@ -27,6 +27,7 @@ function toPlantSummary(plant: PlantRow, sp: SpeciesRow, plantedByName: string):
     plantedAt: plant.plantedAt.toISOString(),
     lastWateredAt: plant.lastWateredAt?.toISOString() ?? null,
     plantedByName,
+    plantedById: plant.plantedBy,
     description: plant.description,
     accessNotes: plant.accessNotes,
     wateringFrequencyDays: sp.wateringFrequencyDays,
@@ -78,13 +79,14 @@ export async function getGardenData(): Promise<GardenData> {
 export interface PlantDetail {
   plant: PlantSummary;
   observations: ObservationEntry[];
+  adopters: { id: number; name: string }[];
 }
 
 // cache(): generateMetadata, the OG image, and the page render share one query
 // per request instead of three.
 export const getPlantDetail = cache(async (id: number): Promise<PlantDetail | null> => {
   try {
-    const [rows, logRows] = await Promise.all([
+    const [rows, logRows, adopterRows] = await Promise.all([
       db
         .select({ plant: plants, species: species, plantedByName: users.displayName })
         .from(plants)
@@ -102,12 +104,18 @@ export const getPlantDetail = cache(async (id: number): Promise<PlantDetail | nu
           diseaseTag: observations.diseaseTag,
           createdAt: observations.createdAt,
           userName: users.displayName,
+          userId: observations.userId,
         })
         .from(observations)
         .innerJoin(users, eq(observations.userId, users.id))
         .where(eq(observations.plantId, id))
         .orderBy(desc(observations.createdAt))
         .limit(100),
+      db
+        .select({ id: users.id, name: users.displayName })
+        .from(adoptions)
+        .innerJoin(users, eq(adoptions.userId, users.id))
+        .where(eq(adoptions.plantId, id)),
     ]);
 
     const row = rows[0];
@@ -116,6 +124,7 @@ export const getPlantDetail = cache(async (id: number): Promise<PlantDetail | nu
     return {
       plant: toPlantSummary(row.plant, row.species, row.plantedByName),
       observations: logRows.map((log) => ({ ...log, createdAt: log.createdAt.toISOString() })),
+      adopters: adopterRows,
     };
   } catch (error) {
     console.error('Failed to load plant detail:', error);

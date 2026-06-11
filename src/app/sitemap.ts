@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { db } from '@/db';
 import { plants } from '@/db/schema';
 import { ne } from 'drizzle-orm';
+import { getGardenerIds } from '@/lib/social-data';
 
 const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://gloal-garden.vercel.app';
 
@@ -12,6 +13,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: BASE_URL, lastModified: new Date(), changeFrequency: 'hourly', priority: 1 },
   ];
+
+  entries.push({ url: `${BASE_URL}/feed`, lastModified: new Date(), changeFrequency: 'hourly', priority: 0.8 });
 
   try {
     const rows = await db
@@ -25,6 +28,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         lastModified: row.plantedAt,
         changeFrequency: 'daily',
         priority: 0.7,
+      });
+    }
+
+    const gardenerIds = await getGardenerIds();
+    for (const id of gardenerIds) {
+      entries.push({
+        url: `${BASE_URL}/gardeners/${id}`,
+        lastModified: new Date(),
+        changeFrequency: 'daily',
+        priority: 0.6,
       });
     }
   } catch (error) {

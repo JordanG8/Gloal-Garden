@@ -25,6 +25,7 @@ export async function GET(
         diseaseTag: observations.diseaseTag,
         createdAt: observations.createdAt,
         userName: users.displayName,
+        userId: observations.userId,
       })
       .from(observations)
       .innerJoin(users, eq(observations.userId, users.id))
