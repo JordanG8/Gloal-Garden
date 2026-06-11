@@ -1,10 +1,38 @@
+import { cache } from 'react';
 import { db } from '@/db';
-import { plants, species, users } from '@/db/schema';
-import { eq, ne } from 'drizzle-orm';
+import { observations, plants, species, users } from '@/db/schema';
+import { desc, eq, ne } from 'drizzle-orm';
 import { computeStatus } from './plant-status';
-import type { PlantSummary, SpeciesOption } from './types';
+import type { ObservationEntry, PlantSummary, SpeciesOption } from './types';
 
 const NEW_PLANT_WINDOW_DAYS = 14;
+
+type PlantRow = typeof plants.$inferSelect;
+type SpeciesRow = typeof species.$inferSelect;
+
+function toPlantSummary(plant: PlantRow, sp: SpeciesRow, plantedByName: string): PlantSummary {
+  return {
+    id: plant.id,
+    name: plant.nickname || sp.commonName,
+    lat: plant.lat,
+    lng: plant.lng,
+    emoji: sp.emoji,
+    category: sp.category,
+    speciesName: sp.commonName,
+    scientificName: sp.scientificName,
+    status: computeStatus(plant, sp),
+    isNew:
+      Date.now() - new Date(plant.plantedAt).getTime() <
+      NEW_PLANT_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    plantedAt: plant.plantedAt.toISOString(),
+    lastWateredAt: plant.lastWateredAt?.toISOString() ?? null,
+    plantedByName,
+    description: plant.description,
+    accessNotes: plant.accessNotes,
+    wateringFrequencyDays: sp.wateringFrequencyDays,
+    daysToHarvest: sp.daysToHarvest,
+  };
+}
 
 export interface GardenData {
   plants: PlantSummary[];
@@ -36,29 +64,11 @@ export async function getGardenData(): Promise<GardenData> {
         .orderBy(species.commonName),
     ]);
 
-    const mapped: PlantSummary[] = plantRows.map(({ plant, species: sp, plantedByName }) => ({
-      id: plant.id,
-      name: plant.nickname || sp.commonName,
-      lat: plant.lat,
-      lng: plant.lng,
-      emoji: sp.emoji,
-      category: sp.category,
-      speciesName: sp.commonName,
-      scientificName: sp.scientificName,
-      status: computeStatus(plant, sp),
-      isNew:
-        Date.now() - new Date(plant.plantedAt).getTime() <
-        NEW_PLANT_WINDOW_DAYS * 24 * 60 * 60 * 1000,
-      plantedAt: plant.plantedAt.toISOString(),
-      lastWateredAt: plant.lastWateredAt?.toISOString() ?? null,
-      plantedByName,
-      description: plant.description,
-      accessNotes: plant.accessNotes,
-      wateringFrequencyDays: sp.wateringFrequencyDays,
-      daysToHarvest: sp.daysToHarvest,
-    }));
-
-    return { plants: mapped, speciesList: speciesRows, dbReady: true };
+    return {
+      plants: plantRows.map((row) => toPlantSummary(row.plant, row.species, row.plantedByName)),
+      speciesList: speciesRows,
+      dbReady: true,
+    };
   } catch (error) {
     console.error('Failed to load garden data (is POSTGRES_URL configured?):', error);
     return { plants: [], speciesList: [], dbReady: false };
@@ -67,14 +77,13 @@ export async function getGardenData(): Promise<GardenData> {
 
 export interface PlantDetail {
   plant: PlantSummary;
-  observations: import('./types').ObservationEntry[];
+  observations: ObservationEntry[];
 }
 
-export async function getPlantDetail(id: number): Promise<PlantDetail | null> {
+// cache(): generateMetadata, the OG image, and the page render share one query
+// per request instead of three.
+export const getPlantDetail = cache(async (id: number): Promise<PlantDetail | null> => {
   try {
-    const { observations } = await import('@/db/schema');
-    const { desc } = await import('drizzle-orm');
-
     const [rows, logRows] = await Promise.all([
       db
         .select({ plant: plants, species: species, plantedByName: users.displayName })
@@ -104,33 +113,12 @@ export async function getPlantDetail(id: number): Promise<PlantDetail | null> {
     const row = rows[0];
     if (!row) return null;
 
-    const { plant, species: sp, plantedByName } = row;
     return {
-      plant: {
-        id: plant.id,
-        name: plant.nickname || sp.commonName,
-        lat: plant.lat,
-        lng: plant.lng,
-        emoji: sp.emoji,
-        category: sp.category,
-        speciesName: sp.commonName,
-        scientificName: sp.scientificName,
-        status: computeStatus(plant, sp),
-        isNew:
-          Date.now() - new Date(plant.plantedAt).getTime() <
-          NEW_PLANT_WINDOW_DAYS * 24 * 60 * 60 * 1000,
-        plantedAt: plant.plantedAt.toISOString(),
-        lastWateredAt: plant.lastWateredAt?.toISOString() ?? null,
-        plantedByName,
-        description: plant.description,
-        accessNotes: plant.accessNotes,
-        wateringFrequencyDays: sp.wateringFrequencyDays,
-        daysToHarvest: sp.daysToHarvest,
-      },
+      plant: toPlantSummary(row.plant, row.species, row.plantedByName),
       observations: logRows.map((log) => ({ ...log, createdAt: log.createdAt.toISOString() })),
     };
   } catch (error) {
     console.error('Failed to load plant detail:', error);
     return null;
   }
-}
+});

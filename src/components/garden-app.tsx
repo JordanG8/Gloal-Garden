@@ -64,6 +64,27 @@ export default function GardenApp({
     [plants, selectedPlantId]
   );
 
+  // Keep the URL shareable without server round-trips, and bring the plant
+  // into view when its card opens.
+  function selectPlant(plant: PlantSummary) {
+    setSelectedPlantId(plant.id);
+    window.history.replaceState(null, "", `/?plant=${plant.id}`);
+    const isMobile = window.innerWidth < 768;
+    mapRef.current?.flyTo({
+      center: [plant.lng, plant.lat],
+      zoom: Math.max(mapRef.current.getZoom(), 15.5),
+      duration: 900,
+      // Keep the marker visible above the bottom sheet / beside the side panel.
+      padding: isMobile ? { bottom: 320, top: 0, left: 0, right: 0 } : { right: 400, top: 0, left: 0, bottom: 0 },
+    });
+  }
+
+  function closePanel() {
+    setSelectedPlantId(null);
+    window.history.replaceState(null, "", "/");
+    mapRef.current?.easeTo({ padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 600 });
+  }
+
   function toggleFilter(key: FilterKey) {
     setActiveFilters((prev) => {
       const next = new Set(prev);
@@ -208,7 +229,7 @@ export default function GardenApp({
           <PlantMap
             plants={filteredPlants}
             selectedPlantId={selectedPlantId}
-            onSelectPlant={(plant) => setSelectedPlantId(plant.id)}
+            onSelectPlant={selectPlant}
             addMode={addMode}
             draftLocation={draftLocation}
             onPickLocation={setDraftLocation}
@@ -240,7 +261,7 @@ export default function GardenApp({
           )}
         </div>
 
-        <PlantPanel plant={selectedPlant} user={user} onClose={() => setSelectedPlantId(null)} />
+        <PlantPanel plant={selectedPlant} user={user} onClose={closePanel} />
       </div>
 
       {/* Filter dock */}

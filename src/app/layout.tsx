@@ -18,6 +18,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://gloal-garden.vercel.app"),
   title: "Global Garden",
   description: "A social accountability network for urban guerrilla gardeners.",
 };

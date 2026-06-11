@@ -54,7 +54,7 @@ async function main() {
       // Needs water (watered 5 days ago, frequency 2)
       { speciesId: sp['Cherry Tomato'].id, nickname: 'Alley Tomatoes', lat: 32.51760, lng: 35.00580, plantedBy: alex.id, plantedAt: daysAgo(35), lastWateredAt: daysAgo(5), description: 'Volunteer plant doing surprisingly well.', accessNotes: 'Behind the mural, next to the drain pipe' },
       // Ready to harvest (~60 days old)
-      { speciesId: sp['Cherry Tomato'].id, nickname: 'Plaza Cherry Toms', lat: 32.51840, lng: 35.00475, plantedBy: demo.id, plantedAt: daysAgo(58), lastWateredAt: daysAgo(1), description: 'Planted for the community fridge.' },
+      { speciesId: sp['Cherry Tomato'].id, nickname: 'עדה"ס Cherry Tomatoes', lat: 32.51840, lng: 35.00475, plantedBy: demo.id, plantedAt: daysAgo(58), lastWateredAt: daysAgo(1), description: 'Planted for the community fridge.', accessNotes: 'In the small garden at עדה"ס (Ada\'s Beer & Friends), HaZayit 33' },
       // Reported issue
       { speciesId: sp['Strawberry'].id, nickname: 'Parklet Strawberries', lat: 32.51690, lng: 35.00390, plantedBy: sam.id, plantedAt: daysAgo(40), lastWateredAt: daysAgo(2), status: 'diseased', accessNotes: 'Raised bed in the 4th St parklet' },
       // Mature tree

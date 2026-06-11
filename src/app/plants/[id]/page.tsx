@@ -5,10 +5,10 @@ import Link from "next/link";
 import { Map as MapIcon, MapPin, Droplet, CalendarClock, Sun } from "lucide-react";
 import type { Metadata } from "next";
 import type { SessionUser } from "@/lib/types";
-import { STATUS_BADGE_CLASSES } from "@/lib/plant-status";
 import { daysAgoLabel } from "@/lib/format";
 import CareActions from "@/components/plant-care";
 import ActivityFeed from "@/components/activity-feed";
+import PlantHero from "@/components/plant-hero";
 
 export async function generateMetadata({
   params,
@@ -20,9 +20,21 @@ export async function generateMetadata({
   if (!detail) return { title: "Plant not found · Global Garden" };
 
   const { plant } = detail;
+  const title = `${plant.emoji} ${plant.name} · Global Garden`;
+  const description = `${plant.speciesName} (${plant.scientificName}) growing in public — planted by ${plant.plantedByName}, currently ${plant.status.replace(/_/g, " ")}. Help keep it alive on Global Garden.`;
+
   return {
-    title: `${plant.emoji} ${plant.name} · Global Garden`,
-    description: `${plant.speciesName} (${plant.scientificName}) growing in public — planted by ${plant.plantedByName}, currently ${plant.status.replace(/_/g, " ")}. Help keep it alive on Global Garden.`,
+    title,
+    description,
+    alternates: { canonical: `/plants/${plant.id}` },
+    openGraph: {
+      title,
+      description,
+      type: "article",
+      url: `/plants/${plant.id}`,
+      siteName: "Global Garden",
+    },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 
@@ -42,36 +54,27 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
     if (Number.isFinite(uid)) user = { id: uid, name: session.user.name ?? "Gardener" };
   }
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Place",
+    name: plant.name,
+    description: `${plant.speciesName} (${plant.scientificName}), planted by ${plant.plantedByName}.${plant.description ? ` ${plant.description}` : ""}`,
+    geo: { "@type": "GeoCoordinates", latitude: plant.lat, longitude: plant.lng },
+    keywords: [plant.speciesName, plant.scientificName, plant.category, "community garden", "urban gardening"],
+  };
+
   return (
     <main className="min-h-screen bg-background">
-      {/* Hero — mirrors the panel/overlay hero for a seamless hand-off */}
-      <div className="relative h-64 md:h-80 flex items-end overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-brand-primary-light">
-        <span className="absolute -right-4 -top-6 text-[11rem] md:text-[16rem] leading-none opacity-20 select-none">
-          {plant.emoji}
-        </span>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
+      <PlantHero plant={plant}>
         <Link
           href={`/?plant=${plant.id}`}
           className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/30 text-white px-4 py-2 rounded-full hover:bg-black/50 backdrop-blur-md text-sm font-medium"
         >
           <MapIcon className="w-4 h-4" /> Back to map
         </Link>
-
-        <div className="relative z-10 p-6 md:p-10 text-white w-full max-w-3xl mx-auto">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-3xl">{plant.emoji}</span>
-            <span
-              className={`px-2 py-0.5 backdrop-blur-md rounded text-xs font-bold uppercase tracking-wider ${STATUS_BADGE_CLASSES[plant.status] ?? "bg-primary/80"}`}
-            >
-              {plant.status.replace(/_/g, " ")}
-            </span>
-          </div>
-          <h1 className="text-3xl md:text-4xl font-heading font-bold">{plant.name}</h1>
-          <p className="text-sm md:text-base text-white/80 italic">
-            {plant.speciesName} · {plant.scientificName}
-          </p>
-        </div>
-      </div>
+      </PlantHero>
 
       <div className="max-w-3xl mx-auto p-5 md:p-10 animate-[content-rise_0.5s_cubic-bezier(0.32,0.72,0,1)]">
         {/* Vitals */}

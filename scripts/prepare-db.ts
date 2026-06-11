@@ -35,6 +35,15 @@ async function main() {
     ORDER BY id
   `) as { id: number }[];
 
+  // One-time data fix: give the bar's tomatoes their real identity (idempotent:
+  // matches only the old seeded nickname).
+  await sql`
+    UPDATE plants
+    SET nickname = 'עדה"ס Cherry Tomatoes',
+        access_notes = 'In the small garden at עדה"ס (Ada''s Beer & Friends), HaZayit 33'
+    WHERE nickname = 'Plaza Cherry Toms'
+  `;
+
   if (laPlants.length > 0) {
     const spots = [
       [32.5192, 35.0031], [32.5176, 35.0058], [32.5184, 35.00475], [32.5169, 35.0039],
