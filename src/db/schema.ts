@@ -37,6 +37,7 @@ export const species = pgTable('species', {
   commonName: text('common_name').notNull(),
   scientificName: text('scientific_name').notNull(),
   category: text('category').notNull(), // 'vegetable' | 'fruit' | 'herb' | 'tree'
+  emoji: text('emoji').notNull().default('🌱'),
   growingSeasonStart: integer('growing_season_start'),
   growingSeasonEnd: integer('growing_season_end'),
   daysToHarvest: integer('days_to_harvest'),

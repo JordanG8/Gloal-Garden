@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   providers: [
     Credentials({
       credentials: {
@@ -17,7 +18,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           return null;
         }
 
-        const result = await db.select().from(users).where(eq(users.email, credentials.email as string)).limit(1);
+        const email = (credentials.email as string).trim().toLowerCase();
+        const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
         const user = result[0];
 
         if (!user) {
