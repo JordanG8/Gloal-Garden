@@ -9,8 +9,8 @@ const DAY = 24 * 60 * 60 * 1000;
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY);
 
 async function main() {
-  if (!process.env.POSTGRES_URL) {
-    console.error('POSTGRES_URL is not set. Add it to .env before seeding.');
+  if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+    console.error('POSTGRES_URL (or DATABASE_URL) is not set. Add it to .env before seeding.');
     process.exit(1);
   }
 
