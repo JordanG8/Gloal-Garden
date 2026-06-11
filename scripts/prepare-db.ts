@@ -12,8 +12,8 @@ async function main() {
     return;
   }
 
-  console.log('Pushing schema to database…');
-  execSync('npx drizzle-kit push --force', { stdio: 'inherit' });
+  console.log('Applying database migrations…');
+  execSync('npx drizzle-kit migrate', { stdio: 'inherit' });
 
   const { neon } = await import('@neondatabase/serverless');
   const sql = neon(url);
