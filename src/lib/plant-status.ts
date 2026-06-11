@@ -27,8 +27,7 @@ function daysSince(date: Date | string): number {
   return Math.floor(diffMs / (1000 * 60 * 60 * 24));
 }
 
-export function computeStatus(plant: StatusPlantInput, speciesInfo: StatusSpeciesInput): PlantStatus {
-  if (STICKY_STATUSES.includes(plant.status as PlantStatus)) {
+export function computeStatus(plant: StatusPlantInput, speciesInfo: StatusSpeciesInput): PlantStatus {  if (STICKY_STATUSES.includes(plant.status as PlantStatus)) {
     return plant.status as PlantStatus;
   }
 
@@ -48,3 +47,13 @@ export function computeStatus(plant: StatusPlantInput, speciesInfo: StatusSpecie
 
   return 'growing';
 }
+
+// Tailwind classes for the status badge shown on plant heroes.
+export const STATUS_BADGE_CLASSES: Record<string, string> = {
+  growing: 'bg-primary/80',
+  needs_water: 'bg-blue-500/80',
+  ready_to_harvest: 'bg-destructive/80',
+  needs_attention: 'bg-orange-500/80',
+  diseased: 'bg-orange-600/80',
+  dormant: 'bg-stone-500/80',
+};

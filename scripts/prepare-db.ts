@@ -25,6 +25,30 @@ async function main() {
   } else {
     console.log('Database already has data — skipping seed.');
   }
+
+  // One-time data fix: earlier seeds placed the demo garden in downtown LA.
+  // Relocate any plants still there to the Givat Ada cluster (idempotent: once
+  // moved, nothing matches the LA bounding box anymore).
+  const laPlants = (await sql`
+    SELECT id FROM plants
+    WHERE lat BETWEEN 33.9 AND 34.2 AND lng BETWEEN -118.4 AND -118.1
+    ORDER BY id
+  `) as { id: number }[];
+
+  if (laPlants.length > 0) {
+    const spots = [
+      [32.5192, 35.0031], [32.5176, 35.0058], [32.5184, 35.00475], [32.5169, 35.0039],
+      [32.5201, 35.0052], [32.5173, 35.007], [32.5196, 35.0015], [32.516, 35.0025],
+      [32.5208, 35.0033], [32.5187, 35.0005],
+    ];
+    console.log(`Relocating ${laPlants.length} demo plants from LA to Givat Ada…`);
+    for (let i = 0; i < laPlants.length; i++) {
+      const [lat, lng] = spots[i % spots.length];
+      // Nudge repeats slightly so markers never stack exactly.
+      const jitter = Math.floor(i / spots.length) * 0.0004;
+      await sql`UPDATE plants SET lat = ${lat + jitter}, lng = ${lng + jitter} WHERE id = ${laPlants[i].id}`;
+    }
+  }
 }
 
 main().catch((e) => {

@@ -3,11 +3,18 @@ import { getGardenData } from "@/lib/data";
 import GardenApp from "@/components/garden-app";
 import type { SessionUser } from "@/lib/types";
 
-export default async function Home() {
-  const [session, { plants, speciesList, dbReady }] = await Promise.all([
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ plant?: string }>;
+}) {
+  const [session, { plants, speciesList, dbReady }, { plant: plantParam }] = await Promise.all([
     auth(),
     getGardenData(),
+    searchParams,
   ]);
+
+  const initialPlantId = plantParam ? parseInt(plantParam, 10) : NaN;
 
   let user: SessionUser | null = null;
   if (session?.user?.id) {
@@ -17,5 +24,13 @@ export default async function Home() {
     }
   }
 
-  return <GardenApp plants={plants} speciesList={speciesList} user={user} dbReady={dbReady} />;
+  return (
+    <GardenApp
+      plants={plants}
+      speciesList={speciesList}
+      user={user}
+      dbReady={dbReady}
+      initialPlantId={Number.isFinite(initialPlantId) ? initialPlantId : null}
+    />
+  );
 }

@@ -15,7 +15,8 @@ import AddPlantForm from "./add-plant-form";
 
 type FilterKey = "needs_water" | "ready_to_harvest" | "critical" | "new";
 
-const DEFAULT_VIEW = { longitude: -118.2437, latitude: 34.0522, zoom: 13.5 };
+// עדה"ס (Ada's Beer & Friends), HaZayit 33, Givat Ada — the heart of the garden.
+const DEFAULT_VIEW = { longitude: 35.0047, latitude: 32.5184, zoom: 15.5 };
 
 function matchesFilter(plant: PlantSummary, filter: FilterKey): boolean {
   switch (filter) {
@@ -35,16 +36,18 @@ export default function GardenApp({
   speciesList,
   user,
   dbReady,
+  initialPlantId = null,
 }: {
   plants: PlantSummary[];
   speciesList: SpeciesOption[];
   user: SessionUser | null;
   dbReady: boolean;
+  initialPlantId?: number | null;
 }) {
   const router = useRouter();
   const mapRef = useRef<MapRef | null>(null);
 
-  const [selectedPlantId, setSelectedPlantId] = useState<number | null>(null);
+  const [selectedPlantId, setSelectedPlantId] = useState<number | null>(initialPlantId);
   const [activeFilters, setActiveFilters] = useState<Set<FilterKey>>(new Set());
   const [addMode, setAddMode] = useState(false);
   const [draftLocation, setDraftLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -210,7 +213,11 @@ export default function GardenApp({
             draftLocation={draftLocation}
             onPickLocation={setDraftLocation}
             mapRef={mapRef}
-            initialView={DEFAULT_VIEW}
+            initialView={
+              selectedPlant
+                ? { longitude: selectedPlant.lng, latitude: selectedPlant.lat, zoom: 16 }
+                : DEFAULT_VIEW
+            }
           />
 
           {/* Empty state when DB is ready but garden is empty */}
