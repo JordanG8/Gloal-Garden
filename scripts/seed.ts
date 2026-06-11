@@ -45,26 +45,26 @@ async function main() {
 
   const sp = Object.fromEntries(insertedSpecies.map((s) => [s.commonName, s]));
 
-  // Downtown LA cluster with a mix of statuses.
+  // Givat Ada cluster around עדה"ס (HaZayit 33) with a mix of statuses.
   const insertedPlants = await db
     .insert(plants)
     .values([
       // Healthy, recently watered
-      { speciesId: sp['Sweet Basil'].id, nickname: 'Library Steps Basil', lat: 34.0505, lng: -118.2551, plantedBy: demo.id, plantedAt: daysAgo(12), lastWateredAt: daysAgo(1), accessNotes: 'Planter box by the south entrance' },
+      { speciesId: sp['Sweet Basil'].id, nickname: 'Library Steps Basil', lat: 32.51920, lng: 35.00310, plantedBy: demo.id, plantedAt: daysAgo(12), lastWateredAt: daysAgo(1), accessNotes: 'Planter box by the south entrance' },
       // Needs water (watered 5 days ago, frequency 2)
-      { speciesId: sp['Cherry Tomato'].id, nickname: 'Alley Tomatoes', lat: 34.0481, lng: -118.2495, plantedBy: alex.id, plantedAt: daysAgo(35), lastWateredAt: daysAgo(5), description: 'Volunteer plant doing surprisingly well.', accessNotes: 'Behind the mural, next to the drain pipe' },
+      { speciesId: sp['Cherry Tomato'].id, nickname: 'Alley Tomatoes', lat: 32.51760, lng: 35.00580, plantedBy: alex.id, plantedAt: daysAgo(35), lastWateredAt: daysAgo(5), description: 'Volunteer plant doing surprisingly well.', accessNotes: 'Behind the mural, next to the drain pipe' },
       // Ready to harvest (~60 days old)
-      { speciesId: sp['Cherry Tomato'].id, nickname: 'Plaza Cherry Toms', lat: 34.0522, lng: -118.2437, plantedBy: demo.id, plantedAt: daysAgo(58), lastWateredAt: daysAgo(1), description: 'Planted for the community fridge.' },
+      { speciesId: sp['Cherry Tomato'].id, nickname: 'Plaza Cherry Toms', lat: 32.51840, lng: 35.00475, plantedBy: demo.id, plantedAt: daysAgo(58), lastWateredAt: daysAgo(1), description: 'Planted for the community fridge.' },
       // Reported issue
-      { speciesId: sp['Strawberry'].id, nickname: 'Parklet Strawberries', lat: 34.0468, lng: -118.2412, plantedBy: sam.id, plantedAt: daysAgo(40), lastWateredAt: daysAgo(2), status: 'diseased', accessNotes: 'Raised bed in the 4th St parklet' },
+      { speciesId: sp['Strawberry'].id, nickname: 'Parklet Strawberries', lat: 32.51690, lng: 35.00390, plantedBy: sam.id, plantedAt: daysAgo(40), lastWateredAt: daysAgo(2), status: 'diseased', accessNotes: 'Raised bed in the 4th St parklet' },
       // Mature tree
-      { speciesId: sp['Lemon Tree'].id, nickname: 'Courthouse Lemon', lat: 34.0556, lng: -118.2426, plantedBy: alex.id, plantedAt: daysAgo(400), lastWateredAt: daysAgo(3), description: 'Anyone can pick — please leave some for others.' },
+      { speciesId: sp['Lemon Tree'].id, nickname: 'Courthouse Lemon', lat: 32.52010, lng: 35.00520, plantedBy: alex.id, plantedAt: daysAgo(400), lastWateredAt: daysAgo(3), description: 'Anyone can pick — please leave some for others.' },
       // Fresh planting
-      { speciesId: sp['Mint'].id, nickname: 'Bus Stop Mint', lat: 34.0497, lng: -118.2392, plantedBy: sam.id, plantedAt: daysAgo(3), lastWateredAt: daysAgo(0), accessNotes: 'Sidewalk strip, NE corner' },
-      { speciesId: sp['Jalapeño'].id, nickname: 'Spice Corner', lat: 34.0539, lng: -118.2486, plantedBy: demo.id, plantedAt: daysAgo(20), lastWateredAt: daysAgo(1) },
-      { speciesId: sp['Rosemary'].id, nickname: 'Stairway Rosemary', lat: 34.0461, lng: -118.2528, plantedBy: alex.id, plantedAt: daysAgo(120), lastWateredAt: daysAgo(6), description: 'Hardy bush, take cuttings freely.' },
-      { speciesId: sp['Zucchini'].id, nickname: 'Vacant Lot Zukes', lat: 34.0573, lng: -118.2467, plantedBy: sam.id, plantedAt: daysAgo(48), lastWateredAt: daysAgo(1) },
-      { speciesId: sp['Carrot'].id, nickname: 'Median Carrots', lat: 34.0512, lng: -118.2589, plantedBy: demo.id, plantedAt: daysAgo(70), lastWateredAt: daysAgo(4) },
+      { speciesId: sp['Mint'].id, nickname: 'Bus Stop Mint', lat: 32.51730, lng: 35.00700, plantedBy: sam.id, plantedAt: daysAgo(3), lastWateredAt: daysAgo(0), accessNotes: 'Sidewalk strip, NE corner' },
+      { speciesId: sp['Jalapeño'].id, nickname: 'Spice Corner', lat: 32.51960, lng: 35.00150, plantedBy: demo.id, plantedAt: daysAgo(20), lastWateredAt: daysAgo(1) },
+      { speciesId: sp['Rosemary'].id, nickname: 'Stairway Rosemary', lat: 32.51600, lng: 35.00250, plantedBy: alex.id, plantedAt: daysAgo(120), lastWateredAt: daysAgo(6), description: 'Hardy bush, take cuttings freely.' },
+      { speciesId: sp['Zucchini'].id, nickname: 'Vacant Lot Zukes', lat: 32.52080, lng: 35.00330, plantedBy: sam.id, plantedAt: daysAgo(48), lastWateredAt: daysAgo(1) },
+      { speciesId: sp['Carrot'].id, nickname: 'Median Carrots', lat: 32.51870, lng: 35.00050, plantedBy: demo.id, plantedAt: daysAgo(70), lastWateredAt: daysAgo(4) },
     ])
     .returning();
 
