@@ -6,14 +6,16 @@ import Link from "next/link";
 import type { MapRef } from "react-map-gl/maplibre";
 import {
   LocateFixed, Droplet, Sprout, AlertTriangle, Plus, X, LogOut, DatabaseZap,
+  HeartHandshake, Trophy, User as UserIcon, Zap,
 } from "lucide-react";
 import type { PlantSummary, SessionUser, SpeciesOption } from "@/lib/types";
 import { signOutAction } from "@/lib/auth-actions";
+import { trustLevelFor, nextTrustLevel } from "@/lib/karma";
 import PlantMap from "./plant-map";
 import PlantPanel from "./plant-panel";
 import AddPlantForm from "./add-plant-form";
 
-type FilterKey = "needs_water" | "ready_to_harvest" | "critical" | "new";
+type FilterKey = "needs_water" | "ready_to_harvest" | "critical" | "new" | "up_for_adoption";
 
 // עדה"ס (Ada's Beer & Friends), HaZayit 33, Givat Ada — the heart of the garden.
 const DEFAULT_VIEW = { longitude: 35.0047, latitude: 32.5184, zoom: 15.5 };
@@ -28,6 +30,8 @@ function matchesFilter(plant: PlantSummary, filter: FilterKey): boolean {
       return plant.status === "needs_attention" || plant.status === "diseased";
     case "new":
       return plant.isNew;
+    case "up_for_adoption":
+      return plant.upForAdoption;
   }
 }
 
@@ -35,12 +39,14 @@ export default function GardenApp({
   plants,
   speciesList,
   user,
+  adoptedPlantIds = [],
   dbReady,
   initialPlantId = null,
 }: {
   plants: PlantSummary[];
   speciesList: SpeciesOption[];
   user: SessionUser | null;
+  adoptedPlantIds?: number[];
   dbReady: boolean;
   initialPlantId?: number | null;
 }) {
@@ -133,6 +139,13 @@ export default function GardenApp({
       classes: "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20",
       activeClasses: "bg-primary text-primary-foreground border-primary",
     },
+    {
+      key: "up_for_adoption",
+      label: "Needs a Steward",
+      icon: <HeartHandshake className="w-4 h-4" />,
+      classes: "bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-200",
+      activeClasses: "bg-amber-600 text-white border-amber-600",
+    },
   ];
 
   return (
@@ -147,14 +160,19 @@ export default function GardenApp({
         </div>
 
         <div className="pointer-events-auto relative">
-          <div className="bg-background/90 backdrop-blur-md rounded-full p-1 border border-border shadow-sm flex items-center">
+          <div className="bg-background/90 backdrop-blur-md rounded-full p-1 border border-border shadow-sm flex items-center gap-1">
             {user ? (
               <button
                 onClick={() => setMenuOpen((open) => !open)}
-                className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold hover:bg-primary/30 transition"
+                className="flex items-center gap-2 pl-3 pr-1 py-1 rounded-full hover:bg-primary/5 transition"
                 aria-label="Account menu"
               >
-                {user.name.charAt(0).toUpperCase()}
+                <span className="font-mono text-sm font-bold text-primary flex items-center gap-1">
+                  <Zap className="w-3.5 h-3.5" /> {user.karma}
+                </span>
+                <span className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold">
+                  {user.name.charAt(0).toUpperCase()}
+                </span>
               </button>
             ) : (
               <Link
@@ -167,8 +185,25 @@ export default function GardenApp({
           </div>
 
           {menuOpen && user && (
-            <div className="absolute right-0 mt-2 w-56 bg-background border border-border rounded-2xl shadow-xl p-2">
-              <p className="px-3 py-2 text-sm font-medium text-foreground truncate">{user.name}</p>
+            <div className="absolute right-0 mt-2 w-64 bg-background border border-border rounded-2xl shadow-xl p-2">
+              <div className="px-3 py-2 border-b border-border/60 mb-1">
+                <p className="text-sm font-medium text-foreground truncate">{user.name}</p>
+                <AccountTrustSummary karma={user.karma} />
+              </div>
+              <Link
+                href={`/users/${user.id}`}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground rounded-xl hover:bg-primary/5 transition"
+                onClick={() => setMenuOpen(false)}
+              >
+                <UserIcon className="w-4 h-4" /> My profile
+              </Link>
+              <Link
+                href="/leaderboard"
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm text-foreground rounded-xl hover:bg-primary/5 transition"
+                onClick={() => setMenuOpen(false)}
+              >
+                <Trophy className="w-4 h-4" /> Leaderboard
+              </Link>
               <form action={signOutAction}>
                 <button
                   type="submit"
@@ -240,7 +275,12 @@ export default function GardenApp({
           )}
         </div>
 
-        <PlantPanel plant={selectedPlant} user={user} onClose={() => setSelectedPlantId(null)} />
+        <PlantPanel
+          plant={selectedPlant}
+          user={user}
+          viewerIsSteward={selectedPlant ? adoptedPlantIds.includes(selectedPlant.id) : false}
+          onClose={() => setSelectedPlantId(null)}
+        />
       </div>
 
       {/* Filter dock */}
@@ -295,5 +335,27 @@ export default function GardenApp({
         />
       )}
     </main>
+  );
+}
+
+function AccountTrustSummary({ karma }: { karma: number }) {
+  const level = trustLevelFor(karma);
+  const next = nextTrustLevel(karma);
+  const progress = next
+    ? Math.min(100, Math.round(((karma - level.minKarma) / (next.minKarma - level.minKarma)) * 100))
+    : 100;
+
+  return (
+    <div className="mt-1">
+      <p className="text-xs text-muted-foreground">
+        {level.emoji} {level.name}
+        {next && (
+          <span className="font-mono"> · {next.minKarma - karma} to {next.name}</span>
+        )}
+      </p>
+      <div className="mt-1.5 h-1.5 rounded-full bg-secondary overflow-hidden">
+        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+      </div>
+    </div>
   );
 }

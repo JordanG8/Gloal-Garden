@@ -8,6 +8,7 @@ import { STATUS_BADGE_CLASSES } from "@/lib/plant-status";
 import { daysAgoLabel } from "@/lib/format";
 import CareActions from "./plant-care";
 import ActivityFeed from "./activity-feed";
+import StewardSection from "./steward-section";
 
 const EXPAND_NAV_DELAY_MS = 380;
 const DRAG_OPEN_THRESHOLD_PX = -70;
@@ -15,10 +16,12 @@ const DRAG_OPEN_THRESHOLD_PX = -70;
 export default function PlantPanel({
   plant,
   user,
+  viewerIsSteward = false,
   onClose,
 }: {
   plant: PlantSummary | null;
   user: SessionUser | null;
+  viewerIsSteward?: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -80,6 +83,7 @@ export default function PlantPanel({
             key={plant.id}
             plant={plant}
             user={user}
+            viewerIsSteward={viewerIsSteward}
             onClose={onClose}
             onOpenFullPage={openFullPage}
             handleProps={{ onPointerDown, onPointerMove, onPointerUp, onPointerCancel: onPointerUp }}
@@ -115,12 +119,14 @@ export default function PlantPanel({
 function PanelContent({
   plant,
   user,
+  viewerIsSteward,
   onClose,
   onOpenFullPage,
   handleProps,
 }: {
   plant: PlantSummary;
   user: SessionUser | null;
+  viewerIsSteward: boolean;
   onClose: () => void;
   onOpenFullPage: () => void;
   handleProps: React.HTMLAttributes<HTMLDivElement>;
@@ -219,6 +225,16 @@ function PanelContent({
             )}
           </div>
         )}
+
+        <StewardSection
+          plantId={plant.id}
+          founderId={plant.founderId}
+          founderName={plant.plantedByName}
+          upForAdoption={plant.upForAdoption}
+          stewardCount={plant.stewardCount}
+          viewerIsSteward={viewerIsSteward}
+          user={user}
+        />
 
         <CareActions plantId={plant.id} status={plant.status} user={user} onLogged={loadLogs} />
 

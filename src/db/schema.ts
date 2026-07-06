@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   serial,
@@ -6,7 +7,9 @@ import {
   integer,
   doublePrecision,
   json,
-  primaryKey
+  primaryKey,
+  index,
+  uniqueIndex
 } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
@@ -30,7 +33,11 @@ export const users = pgTable('users', {
     harvestsLogged: 0
   }),
   badges: json('badges').$type<string[]>().default([]),
-});
+  // Denormalized display value; the karma_events ledger is the source of truth.
+  karma: integer('karma').notNull().default(0),
+}, (t) => [
+  index('users_karma_idx').on(t.karma),
+]);
 
 export const species = pgTable('species', {
   id: serial('id').primaryKey(),
@@ -93,6 +100,27 @@ export const adoptions = pgTable('adoptions', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => [
   primaryKey({ columns: [t.userId, t.plantId] })
+]);
+
+// Append-only karma ledger. Zero-point rows are inserted on purpose (they act
+// as cooldown markers and honest history); negative rows are allowed for
+// moderation reversals. users.karma is the denormalized running total.
+export const karmaEvents = pgTable('karma_events', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  plantId: integer('plant_id').references(() => plants.id),
+  observationId: integer('observation_id').references(() => observations.id),
+  kind: text('kind').notNull(),
+  points: integer('points').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('karma_events_user_created_idx').on(t.userId, t.createdAt),
+  index('karma_events_plant_kind_idx').on(t.plantId, t.kind),
+  // Founder bonuses are once-per-plant; the partial unique index makes the
+  // "has this already been paid?" check race-proof (insert onConflictDoNothing).
+  uniqueIndex('karma_events_once_per_plant_idx')
+    .on(t.plantId, t.kind)
+    .where(sql`${t.kind} in ('plant_established', 'plant_first_harvest')`),
 ]);
 
 export const notifications = pgTable('notifications', {
