@@ -14,6 +14,9 @@ export interface PlantSummary {
   plantedAt: string;
   lastWateredAt: string | null;
   plantedByName: string;
+  founderId: number;
+  upForAdoption: boolean;
+  stewardCount: number;
   description: string | null;
   accessNotes: string | null;
   wateringFrequencyDays: number | null;
@@ -41,6 +44,58 @@ export interface ObservationEntry {
 export interface SessionUser {
   id: number;
   name: string;
+  karma: number;
+  trustLevel: number;
 }
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+export interface StewardEntry {
+  id: number;
+  name: string;
+  active: boolean;
+  adoptedAt: string;
+}
+
+export interface UserProfile {
+  id: number;
+  displayName: string;
+  bio: string | null;
+  location: string | null;
+  createdAt: string;
+  karma: number;
+  badges: string[];
+  stats: {
+    plantsFounded: number;
+    harvests: number;
+    verifiedHarvests: number;
+    waterings: number;
+    photos: number;
+    rescues: number;
+  };
+  stewardships: {
+    plantId: number;
+    plantName: string;
+    emoji: string;
+    active: boolean;
+    adoptedAt: string;
+  }[];
+  recentEvents: {
+    id: number;
+    kind: string;
+    points: number;
+    plantId: number | null;
+    plantName: string | null;
+    createdAt: string;
+  }[];
+}
+
+export interface LeaderboardRow {
+  id: number;
+  displayName: string;
+  karma: number;
+  karma7d: number;
+  badges: string[];
+}
+
+export type ActionResult =
+  | { ok: true; pointsAwarded?: number; newBadges?: string[]; note?: string }
+  | { ok: false; error: string };

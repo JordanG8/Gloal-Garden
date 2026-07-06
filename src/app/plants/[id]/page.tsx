@@ -1,14 +1,16 @@
-import { auth } from "@/auth";
 import { getPlantDetail } from "@/lib/data";
+import { getSessionUser } from "@/lib/auth-helpers";
+import { canEditPlant } from "@/lib/karma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Map as MapIcon, MapPin, Droplet, CalendarClock, Sun } from "lucide-react";
+import { Map as MapIcon, MapPin, Droplet, CalendarClock, Sun, Camera } from "lucide-react";
 import type { Metadata } from "next";
-import type { SessionUser } from "@/lib/types";
 import { STATUS_BADGE_CLASSES } from "@/lib/plant-status";
 import { daysAgoLabel } from "@/lib/format";
 import CareActions from "@/components/plant-care";
 import ActivityFeed from "@/components/activity-feed";
+import StewardSection from "@/components/steward-section";
+import EditPlantDetails from "@/components/edit-plant-details";
 
 export async function generateMetadata({
   params,
@@ -31,16 +33,20 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
   const plantId = parseInt(id, 10);
   if (!Number.isFinite(plantId)) notFound();
 
-  const [session, detail] = await Promise.all([auth(), getPlantDetail(plantId)]);
+  const [user, detail] = await Promise.all([getSessionUser(), getPlantDetail(plantId)]);
   if (!detail) notFound();
 
-  const { plant, observations } = detail;
+  const { plant, observations, stewards, verified } = detail;
 
-  let user: SessionUser | null = null;
-  if (session?.user?.id) {
-    const uid = parseInt(session.user.id, 10);
-    if (Number.isFinite(uid)) user = { id: uid, name: session.user.name ?? "Gardener" };
-  }
+  const viewerSteward = user ? stewards.find((s) => s.id === user.id) : undefined;
+  const canEdit =
+    !!user &&
+    canEditPlant({
+      karma: user.karma,
+      isFounder: plant.founderId === user.id,
+      isSteward: !!viewerSteward,
+      isActiveSteward: viewerSteward?.active ?? false,
+    });
 
   return (
     <main className="min-h-screen bg-background">
@@ -58,13 +64,23 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
         </Link>
 
         <div className="relative z-10 p-6 md:p-10 text-white w-full max-w-3xl mx-auto">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <span className="text-3xl">{plant.emoji}</span>
             <span
               className={`px-2 py-0.5 backdrop-blur-md rounded text-xs font-bold uppercase tracking-wider ${STATUS_BADGE_CLASSES[plant.status] ?? "bg-primary/80"}`}
             >
               {plant.status.replace(/_/g, " ")}
             </span>
+            {plant.upForAdoption && (
+              <span className="px-2 py-0.5 backdrop-blur-md rounded text-xs font-bold uppercase tracking-wider bg-amber-500/90">
+                Needs a steward
+              </span>
+            )}
+            {!verified && (
+              <span className="px-2 py-0.5 backdrop-blur-md rounded text-xs font-bold uppercase tracking-wider bg-black/30 flex items-center gap-1">
+                <Camera className="w-3 h-3" /> Needs photo verification
+              </span>
+            )}
           </div>
           <h1 className="text-3xl md:text-4xl font-heading font-bold">{plant.name}</h1>
           <p className="text-sm md:text-base text-white/80 italic">
@@ -86,9 +102,24 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
           </div>
           <div className="bg-secondary/50 rounded-xl p-3 md:p-4 text-center border border-border/50">
             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Planted by</p>
-            <p className="font-mono text-sm md:text-base font-bold text-foreground truncate px-1">{plant.plantedByName}</p>
+            <Link
+              href={`/users/${plant.founderId}`}
+              className="font-mono text-sm md:text-base font-bold text-primary truncate px-1 block hover:underline"
+            >
+              {plant.plantedByName}
+            </Link>
           </div>
         </div>
+
+        <StewardSection
+          plantId={plant.id}
+          founderId={plant.founderId}
+          founderName={plant.plantedByName}
+          upForAdoption={plant.upForAdoption}
+          stewardCount={stewards.length}
+          stewards={stewards}
+          user={user}
+        />
 
         {/* Species care facts */}
         <div className="flex flex-wrap gap-2 mb-6 text-sm">
@@ -116,6 +147,15 @@ export default async function PlantPage({ params }: { params: Promise<{ id: stri
               </p>
             )}
           </div>
+        )}
+
+        {canEdit && (
+          <EditPlantDetails
+            plantId={plant.id}
+            nickname={plant.name === plant.speciesName ? "" : plant.name}
+            description={plant.description ?? ""}
+            accessNotes={plant.accessNotes ?? ""}
+          />
         )}
 
         <CareActions plantId={plant.id} status={plant.status} user={user} />

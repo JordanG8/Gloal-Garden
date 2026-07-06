@@ -80,7 +80,11 @@ export default function PlantMap({
             </div>
             <div
               className={`w-10 h-10 flex items-center justify-center rounded-full shadow-lg border-[3px] transition-transform duration-300 ${statusColor(plant.status)} ${
-                selectedPlantId === plant.id ? "scale-125 ring-4 ring-primary/30 z-20" : "hover:scale-110"
+                selectedPlantId === plant.id
+                  ? "scale-125 ring-4 ring-primary/30 z-20"
+                  : plant.upForAdoption
+                    ? "ring-4 ring-amber-400/70 animate-pulse hover:scale-110"
+                    : "hover:scale-110"
               }`}
             >
               <span className="text-xl leading-none">{plant.emoji}</span>

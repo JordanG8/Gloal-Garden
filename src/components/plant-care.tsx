@@ -1,13 +1,19 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Droplet, Camera, CheckCircle2, AlertTriangle, HeartPulse } from "lucide-react";
+import { Droplet, Camera, CheckCircle2, AlertTriangle, HeartPulse, Zap } from "lucide-react";
 import type { SessionUser } from "@/lib/types";
 import type { PlantStatus } from "@/lib/plant-status";
 import { logCareAction } from "@/lib/plant-actions";
 
 type ComposerType = "photo" | "harvest" | "report" | null;
+
+interface Toast {
+  points: number;
+  badges: string[];
+  note?: string;
+}
 
 export default function CareActions({
   plantId,
@@ -23,7 +29,21 @@ export default function CareActions({
   const router = useRouter();
   const [composer, setComposer] = useState<ComposerType>(null);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState<Toast | null>(null);
   const [pending, startTransition] = useTransition();
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimer.current) clearTimeout(toastTimer.current);
+    };
+  }, []);
+
+  function showToast(toast: Toast) {
+    setToast(toast);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 6000);
+  }
 
   function runAction(input: Parameters<typeof logCareAction>[0]) {
     if (!user) {
@@ -38,6 +58,11 @@ export default function CareActions({
         return;
       }
       setComposer(null);
+      showToast({
+        points: result.pointsAwarded ?? 0,
+        badges: result.newBadges ?? [],
+        note: result.note,
+      });
       router.refresh();
       onLogged?.();
     });
@@ -59,6 +84,24 @@ export default function CareActions({
 
   return (
     <>
+      {toast && (
+        <div className="mb-4 rounded-2xl border px-4 py-3 text-sm space-y-1 bg-card border-border shadow-sm">
+          {toast.points > 0 ? (
+            <p className="flex items-center gap-1.5 font-bold text-primary">
+              <Zap className="w-4 h-4" /> +{toast.points} karma
+            </p>
+          ) : (
+            <p className="font-medium text-foreground">Logged — thank you! 🌱</p>
+          )}
+          {toast.note && <p className="text-muted-foreground">{toast.note}</p>}
+          {toast.badges.map((badge) => (
+            <p key={badge} className="font-medium text-amber-700">
+              🏅 Badge earned: {badge}
+            </p>
+          ))}
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 mb-4">
         <button
           disabled={pending}
@@ -102,11 +145,15 @@ export default function CareActions({
 
       {composer && (
         <form action={submitComposer} className="mb-6 bg-card border border-border rounded-2xl p-4 space-y-3 shadow-sm">
-          {composer === "photo" && (
+          {(composer === "photo" || composer === "harvest") && (
             <input
               name="photoUrl"
               type="url"
-              placeholder="Photo URL (https://…)"
+              placeholder={
+                composer === "harvest"
+                  ? "Photo URL — photo-verified harvests earn double"
+                  : "Photo URL (https://…)"
+              }
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
             />
           )}
