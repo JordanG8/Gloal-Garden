@@ -27,7 +27,6 @@ function toPlantSummary(
     name: plant.nickname || sp.commonName,
     lat: plant.lat,
     lng: plant.lng,
-    emoji: sp.emoji,
     category: sp.category,
     speciesName: sp.commonName,
     scientificName: sp.scientificName,
@@ -65,7 +64,6 @@ export async function getGardenData(): Promise<GardenData> {
         .select({
           id: species.id,
           commonName: species.commonName,
-          emoji: species.emoji,
           category: species.category,
         })
         .from(species)

@@ -6,6 +6,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { MapPin } from "lucide-react";
 import type { PlantSummary } from "@/lib/types";
 import type { PlantStatus } from "@/lib/plant-status";
+import { CategoryIcon } from "@/lib/plant-icons";
 
 const STATUS_COLORS: Record<string, string> = {
   needs_water: "bg-blue-500 border-blue-200 text-white",
@@ -66,32 +67,34 @@ export default function PlantMap({
     >
       <NavigationControl position="bottom-right" showCompass={false} />
 
-      {plants.map((plant) => (
-        <Marker key={plant.id} longitude={plant.lng} latitude={plant.lat} anchor="bottom">
-          <div
-            className="relative group cursor-pointer flex flex-col items-center"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!addMode) onSelectPlant(plant);
-            }}
-          >
-            <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-opacity bg-background border border-border px-3 py-1 rounded-full text-sm font-heading shadow-md whitespace-nowrap z-10 pointer-events-none">
-              {plant.name}
-            </div>
+      {plants.map((plant) => {
+        return (
+          <Marker key={plant.id} longitude={plant.lng} latitude={plant.lat} anchor="bottom">
             <div
-              className={`w-10 h-10 flex items-center justify-center rounded-full shadow-lg border-[3px] transition-transform duration-300 ${statusColor(plant.status)} ${
-                selectedPlantId === plant.id
-                  ? "scale-125 ring-4 ring-primary/30 z-20"
-                  : plant.upForAdoption
-                    ? "ring-4 ring-amber-400/70 animate-pulse hover:scale-110"
-                    : "hover:scale-110"
-              }`}
+              className="relative group cursor-pointer flex flex-col items-center"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!addMode) onSelectPlant(plant);
+              }}
             >
-              <span className="text-xl leading-none">{plant.emoji}</span>
+              <div className="absolute -top-12 opacity-0 group-hover:opacity-100 transition-opacity bg-background border border-border px-3.5 py-1.5 rounded-full text-sm font-heading shadow-md whitespace-nowrap z-10 pointer-events-none">
+                {plant.name}
+              </div>
+              <div
+                className={`w-10 h-10 flex items-center justify-center rounded-full shadow-lg border-[3px] transition-transform duration-300 ${statusColor(plant.status)} ${
+                  selectedPlantId === plant.id
+                    ? "scale-125 ring-4 ring-primary/30 z-20"
+                    : plant.upForAdoption
+                      ? "ring-4 ring-amber-400/70 animate-pulse hover:scale-110"
+                      : "hover:scale-110"
+                }`}
+              >
+                <CategoryIcon category={plant.category} className="w-5 h-5" strokeWidth={2} />
+              </div>
             </div>
-          </div>
-        </Marker>
-      ))}
+          </Marker>
+        );
+      })}
 
       {draftLocation && (
         <Marker longitude={draftLocation.lng} latitude={draftLocation.lat} anchor="bottom">

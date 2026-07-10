@@ -2,8 +2,15 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
-import { Sprout } from "lucide-react";
 import type { AuthFormState } from "@/lib/auth-actions";
+import {
+  FieldLabel,
+  FormError,
+  FormHeading,
+  FormSuccess,
+  INPUT_CLASSES,
+  SubmitButton,
+} from "./auth/form-bits";
 
 interface Field {
   name: string;
@@ -14,6 +21,7 @@ interface Field {
 }
 
 export default function AuthForm({
+  kicker,
   title,
   subtitle,
   fields,
@@ -22,7 +30,10 @@ export default function AuthForm({
   altText,
   altHref,
   altLinkLabel,
+  notice,
+  showForgotLink = false,
 }: {
+  kicker: string;
   title: string;
   subtitle: string;
   fields: Field[];
@@ -31,62 +42,61 @@ export default function AuthForm({
   altText: string;
   altHref: string;
   altLinkLabel: string;
+  /** One-time success note, e.g. after a password reset. */
+  notice?: string;
+  showForgotLink?: boolean;
 }) {
   const [state, formAction, pending] = useActionState(action, undefined);
 
   return (
-    <main className="min-h-screen w-full flex items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md">
-        <Link href="/" className="flex items-center justify-center gap-2 mb-8 text-primary">
-          <Sprout className="w-7 h-7" />
-          <span className="font-heading font-bold text-2xl tracking-tight">Global Garden</span>
-        </Link>
+    <div>
+      <FormHeading kicker={kicker} title={title} subtitle={subtitle} />
 
-        <div className="bg-card border border-border rounded-3xl shadow-xl p-8">
-          <h1 className="font-heading text-2xl font-bold text-foreground mb-1">{title}</h1>
-          <p className="text-sm text-muted-foreground mb-6">{subtitle}</p>
-
-          <form action={formAction} className="space-y-4">
-            {fields.map((field) => (
-              <div key={field.name}>
-                <label htmlFor={field.name} className="block text-sm font-medium text-foreground mb-1.5">
-                  {field.label}
-                </label>
-                <input
-                  id={field.name}
-                  name={field.name}
-                  type={field.type}
-                  placeholder={field.placeholder}
-                  autoComplete={field.autoComplete}
-                  required
-                  className="w-full px-4 py-2.5 rounded-xl border border-border bg-background text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring/50 focus:border-ring transition"
-                />
-              </div>
-            ))}
-
-            {state?.error ? (
-              <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-4 py-2.5">
-                {state.error}
-              </p>
-            ) : null}
-
-            <button
-              type="submit"
-              disabled={pending}
-              className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition disabled:opacity-60"
-            >
-              {pending ? "Please wait…" : submitLabel}
-            </button>
-          </form>
-
-          <p className="text-sm text-muted-foreground mt-6 text-center">
-            {altText}{" "}
-            <Link href={altHref} className="text-primary font-medium hover:underline">
-              {altLinkLabel}
-            </Link>
-          </p>
+      {notice && !state?.error && (
+        <div className="mb-8">
+          <FormSuccess>{notice}</FormSuccess>
         </div>
-      </div>
-    </main>
+      )}
+
+      <form action={formAction} className="space-y-7">
+        {fields.map((field) => (
+          <div key={field.name}>
+            <div className="flex items-baseline justify-between">
+              <FieldLabel htmlFor={field.name}>{field.label}</FieldLabel>
+              {showForgotLink && field.type === "password" && (
+                <Link
+                  href="/forgot-password"
+                  className="mb-2.5 text-xs font-medium text-primary hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              )}
+            </div>
+            <input
+              id={field.name}
+              name={field.name}
+              type={field.type}
+              placeholder={field.placeholder}
+              autoComplete={field.autoComplete}
+              required
+              className={INPUT_CLASSES}
+            />
+          </div>
+        ))}
+
+        {state?.error ? <FormError>{state.error}</FormError> : null}
+
+        <div className="pt-2">
+          <SubmitButton pending={pending}>{submitLabel}</SubmitButton>
+        </div>
+      </form>
+
+      <p className="mt-12 text-center text-sm text-muted-foreground">
+        {altText}{" "}
+        <Link href={altHref} className="font-medium text-primary hover:underline">
+          {altLinkLabel}
+        </Link>
+      </p>
+    </div>
   );
 }
