@@ -44,7 +44,7 @@ export async function getUserProfile(id: number): Promise<UserProfile | null> {
           adoptedAt: adoptions.createdAt,
           nickname: plants.nickname,
           commonName: species.commonName,
-          emoji: species.emoji,
+          category: species.category,
           wateringFrequencyDays: species.wateringFrequencyDays,
           lastActionAt: sql<string | null>`(
             select max(o.created_at) from observations o
@@ -97,7 +97,7 @@ export async function getUserProfile(id: number): Promise<UserProfile | null> {
       stewardships: stewardshipRows.map((row) => ({
         plantId: row.plantId,
         plantName: row.nickname || row.commonName,
-        emoji: row.emoji,
+        category: row.category,
         adoptedAt: row.adoptedAt.toISOString(),
         active: isStewardActive({
           lastActionAt: row.lastActionAt ? new Date(row.lastActionAt) : null,

@@ -15,6 +15,7 @@ import {
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   email: text('email').notNull().unique(),
+  emailVerifiedAt: timestamp('email_verified_at'),
   passwordHash: text('password_hash').notNull(),
   displayName: text('display_name').notNull(),
   avatar: text('avatar'),
@@ -121,6 +122,21 @@ export const karmaEvents = pgTable('karma_events', {
   uniqueIndex('karma_events_once_per_plant_idx')
     .on(t.plantId, t.kind)
     .where(sql`${t.kind} in ('plant_established', 'plant_first_harvest')`),
+]);
+
+// Single-use, expiring tokens for email verification and password resets.
+// Only the sha256 hash is stored; the raw token lives exclusively in the
+// emailed link, so a leaked table can't be replayed.
+export const authTokens = pgTable('auth_tokens', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  tokenHash: text('token_hash').notNull().unique(),
+  type: text('type').notNull(), // 'email_verify' | 'password_reset'
+  expiresAt: timestamp('expires_at').notNull(),
+  usedAt: timestamp('used_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('auth_tokens_user_type_idx').on(t.userId, t.type),
 ]);
 
 export const notifications = pgTable('notifications', {

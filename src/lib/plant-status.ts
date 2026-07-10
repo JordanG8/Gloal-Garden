@@ -48,12 +48,14 @@ export function computeStatus(plant: StatusPlantInput, speciesInfo: StatusSpecie
   return 'growing';
 }
 
-// Tailwind classes for the status badge shown on plant heroes.
+// Tailwind classes for the status badge shown on plant heroes (deep green
+// background, white text — "growing" gets a translucent pill so it doesn't
+// vanish into the hero).
 export const STATUS_BADGE_CLASSES: Record<string, string> = {
-  growing: 'bg-primary/80',
-  needs_water: 'bg-blue-500/80',
-  ready_to_harvest: 'bg-destructive/80',
-  needs_attention: 'bg-orange-500/80',
-  diseased: 'bg-orange-600/80',
-  dormant: 'bg-stone-500/80',
+  growing: 'bg-white/20 backdrop-blur-sm',
+  needs_water: 'bg-blue-500/90',
+  ready_to_harvest: 'bg-destructive/90',
+  needs_attention: 'bg-orange-500/90',
+  diseased: 'bg-orange-600/90',
+  dormant: 'bg-stone-500/90',
 };

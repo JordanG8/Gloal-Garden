@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { HeartHandshake, Sprout } from "lucide-react";
+import { HeartHandshake, Moon, Sprout } from "lucide-react";
 import type { SessionUser, StewardEntry } from "@/lib/types";
 import { adoptPlant, abandonPlant } from "@/lib/adoption-actions";
 
@@ -50,7 +50,7 @@ export default function StewardSection({
         setError(result.error);
         return;
       }
-      if (result.pointsAwarded) setNotice(`+${result.pointsAwarded} karma — welcome, steward! 🌱`);
+      if (result.pointsAwarded) setNotice(`+${result.pointsAwarded} karma — welcome, steward!`);
       router.refresh();
     });
   }
@@ -125,14 +125,14 @@ export default function StewardSection({
               key={steward.id}
               href={`/users/${steward.id}`}
               title={steward.active ? "Active steward" : "Inactive — stewardship has lapsed"}
-              className={`text-xs px-2.5 py-1 rounded-full border transition ${
+              className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition ${
                 steward.active
                   ? "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
                   : "bg-secondary text-muted-foreground border-border opacity-60 hover:opacity-100"
               }`}
             >
               {steward.name}
-              {!steward.active && " 💤"}
+              {!steward.active && <Moon className="w-3 h-3 opacity-70" strokeWidth={1.75} />}
             </Link>
           ))}
         </div>

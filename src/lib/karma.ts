@@ -22,9 +22,10 @@
  *    distinct users including a non-founder; new-account throttle applies.
  *  - Fake harvests ..................... verified-plant + age gates, per-user
  *    48h AND per-plant 24h cooldowns; photos are public in the feed.
- *  - Sybil armies ...................... contained (not prevented — no email
- *    verification yet): new-account throttle, per-plant cooldowns, and the
- *    append-only ledger allows negative moderation_adjust reversals.
+ *  - Sybil armies ...................... email verification gates all
+ *    karma-earning actions (when delivery is configured); plus new-account
+ *    throttle, per-plant cooldowns, and the append-only ledger allows
+ *    negative moderation_adjust reversals.
  */
 
 export type CareActionType = 'water' | 'photo' | 'harvest' | 'report' | 'resolve';
@@ -323,17 +324,16 @@ export function plantEstablishedEligible(input: {
 export interface TrustLevel {
   level: number;
   name: string;
-  emoji: string;
   minKarma: number;
   adoptionCap: number;
 }
 
 export const TRUST_LEVELS: TrustLevel[] = [
-  { level: 0, name: 'Seedling', emoji: '🌱', minKarma: 0, adoptionCap: 2 },
-  { level: 1, name: 'Sprout', emoji: '🌿', minKarma: 75, adoptionCap: 5 },
-  { level: 2, name: 'Gardener', emoji: '🧑‍🌾', minKarma: 250, adoptionCap: 10 },
-  { level: 3, name: 'Caretaker', emoji: '🌻', minKarma: 600, adoptionCap: 15 },
-  { level: 4, name: 'Garden Elder', emoji: '🌳', minKarma: 1500, adoptionCap: 25 },
+  { level: 0, name: 'Seedling', minKarma: 0, adoptionCap: 2 },
+  { level: 1, name: 'Sprout', minKarma: 75, adoptionCap: 5 },
+  { level: 2, name: 'Gardener', minKarma: 250, adoptionCap: 10 },
+  { level: 3, name: 'Caretaker', minKarma: 600, adoptionCap: 15 },
+  { level: 4, name: 'Garden Elder', minKarma: 1500, adoptionCap: 25 },
 ];
 
 export function trustLevelFor(karma: number): TrustLevel {
@@ -442,25 +442,24 @@ export type BadgeMetric =
 export interface BadgeDef {
   id: string;
   name: string;
-  emoji: string;
   description: string;
   metric: BadgeMetric;
   threshold: number;
 }
 
 export const BADGES: BadgeDef[] = [
-  { id: 'first_sprout', name: 'First Sprout', emoji: '🌱', description: 'Planted your first plant', metric: 'plantsFounded', threshold: 1 },
-  { id: 'green_thumb', name: 'Green Thumb', emoji: '✋', description: 'Planted 10 plants', metric: 'plantsFounded', threshold: 10 },
-  { id: 'first_harvest', name: 'First Harvest', emoji: '🍅', description: 'Logged your first harvest', metric: 'earningHarvests', threshold: 1 },
-  { id: 'provider', name: 'Provider', emoji: '🧺', description: '10 photo-verified harvests', metric: 'verifiedHarvests', threshold: 10 },
-  { id: 'rainmaker', name: 'Rainmaker', emoji: '💧', description: '50 waterings when plants needed it', metric: 'earningWaterDue', threshold: 50 },
-  { id: 'lifesaver', name: 'Lifesaver', emoji: '🚑', description: 'Rescued 5 plants in trouble', metric: 'rescueBonuses', threshold: 5 },
-  { id: 'good_neighbor', name: 'Good Neighbor', emoji: '🤝', description: "25 care actions on other people's plants", metric: 'goodNeighborEvents', threshold: 25 },
-  { id: 'foster_gardener', name: 'Foster Gardener', emoji: '🏡', description: 'Adopted 5 plants', metric: 'adopts', threshold: 5 },
-  { id: 'watchful_eye', name: 'Watchful Eye', emoji: '👀', description: '10 confirmed problem reports', metric: 'reportsConfirmed', threshold: 10 },
-  { id: 'documentarian', name: 'Documentarian', emoji: '📸', description: '25 photo updates', metric: 'earningPhotos', threshold: 25 },
-  { id: 'full_circle', name: 'Full Circle', emoji: '🔄', description: 'A plant you planted fed someone', metric: 'firstHarvestBonuses', threshold: 1 },
-  { id: 'garden_elder', name: 'Garden Elder', emoji: '🌳', description: 'Reached 1500 karma', metric: 'karma', threshold: 1500 },
+  { id: 'first_sprout', name: 'First Sprout', description: 'Planted your first plant', metric: 'plantsFounded', threshold: 1 },
+  { id: 'green_thumb', name: 'Green Thumb', description: 'Planted 10 plants', metric: 'plantsFounded', threshold: 10 },
+  { id: 'first_harvest', name: 'First Harvest', description: 'Logged your first harvest', metric: 'earningHarvests', threshold: 1 },
+  { id: 'provider', name: 'Provider', description: '10 photo-verified harvests', metric: 'verifiedHarvests', threshold: 10 },
+  { id: 'rainmaker', name: 'Rainmaker', description: '50 waterings when plants needed it', metric: 'earningWaterDue', threshold: 50 },
+  { id: 'lifesaver', name: 'Lifesaver', description: 'Rescued 5 plants in trouble', metric: 'rescueBonuses', threshold: 5 },
+  { id: 'good_neighbor', name: 'Good Neighbor', description: "25 care actions on other people's plants", metric: 'goodNeighborEvents', threshold: 25 },
+  { id: 'foster_gardener', name: 'Foster Gardener', description: 'Adopted 5 plants', metric: 'adopts', threshold: 5 },
+  { id: 'watchful_eye', name: 'Watchful Eye', description: '10 confirmed problem reports', metric: 'reportsConfirmed', threshold: 10 },
+  { id: 'documentarian', name: 'Documentarian', description: '25 photo updates', metric: 'earningPhotos', threshold: 25 },
+  { id: 'full_circle', name: 'Full Circle', description: 'A plant you planted fed someone', metric: 'firstHarvestBonuses', threshold: 1 },
+  { id: 'garden_elder', name: 'Garden Elder', description: 'Reached 1500 karma', metric: 'karma', threshold: 1500 },
 ];
 
 /** Which metrics can change after logging an event of the given kind. */

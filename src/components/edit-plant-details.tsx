@@ -43,7 +43,7 @@ export default function EditPlantDetails({
     return (
       <button
         onClick={() => setOpen(true)}
-        className="mb-6 flex items-center gap-1.5 text-sm text-muted-foreground hover:text-primary transition"
+        className="mb-10 flex items-center gap-2 text-sm text-muted-foreground hover:text-primary transition"
       >
         <Pencil className="w-3.5 h-3.5" /> Edit details
       </button>
@@ -51,40 +51,40 @@ export default function EditPlantDetails({
   }
 
   return (
-    <form action={submit} className="mb-6 bg-card border border-border rounded-2xl p-4 space-y-3 shadow-sm">
+    <form action={submit} className="mb-10 bg-card border border-border rounded-3xl p-5 space-y-4 shadow-sm">
       <input
         name="nickname"
         defaultValue={nickname}
         placeholder="Nickname"
-        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring/50"
+        className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm focus:outline-none focus:border-ring focus:ring-4 focus:ring-ring/15 transition"
       />
       <textarea
         name="description"
         defaultValue={description}
         rows={2}
         placeholder="Description"
-        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+        className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm focus:outline-none focus:border-ring focus:ring-4 focus:ring-ring/15 transition resize-none"
       />
       <textarea
         name="accessNotes"
         defaultValue={accessNotes}
         rows={2}
         placeholder="Access notes (how to find & reach it)"
-        className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring/50 resize-none"
+        className="w-full rounded-2xl border border-border bg-background px-4 py-3 text-sm focus:outline-none focus:border-ring focus:ring-4 focus:ring-ring/15 transition resize-none"
       />
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2">
         <button
           type="submit"
           disabled={pending}
-          className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition disabled:opacity-60"
+          className="px-6 py-2.5 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition disabled:opacity-60"
         >
           {pending ? "Saving…" : "Save"}
         </button>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium border border-border hover:bg-secondary/80 transition"
+          className="px-6 py-2.5 rounded-full bg-secondary text-secondary-foreground text-sm font-medium border border-border hover:bg-secondary/80 transition"
         >
           Cancel
         </button>

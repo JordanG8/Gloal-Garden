@@ -1,9 +1,22 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
-import { Map as MapIcon, Trophy, MapPin } from "lucide-react";
+import {
+  Map as MapIcon,
+  MapPin,
+  Zap,
+  Apple,
+  Siren,
+  Droplet,
+  Sprout,
+  Camera,
+  ShoppingBasket,
+  Moon,
+  type LucideIcon,
+} from "lucide-react";
 import { getUserProfile } from "@/lib/profile-data";
 import { BADGES, trustLevelFor, nextTrustLevel } from "@/lib/karma";
+import { BadgeIcon, CategoryIcon, TrustLevelIcon } from "@/lib/plant-icons";
 import { timeAgo } from "@/lib/format";
 
 export async function generateMetadata({
@@ -51,46 +64,52 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
     ? Math.min(100, Math.round(((profile.karma - level.minKarma) / (next.minKarma - level.minKarma)) * 100))
     : 100;
 
-  const heroStats = [
-    { label: "Verified harvests", value: profile.stats.verifiedHarvests, emoji: "🍅" },
-    { label: "Plants rescued", value: profile.stats.rescues, emoji: "🚑" },
-    { label: "Waterings", value: profile.stats.waterings, emoji: "💧" },
-    { label: "Plants planted", value: profile.stats.plantsFounded, emoji: "🌱" },
-    { label: "Photo updates", value: profile.stats.photos, emoji: "📸" },
-    { label: "All harvests", value: profile.stats.harvests, emoji: "🧺" },
+  const heroStats: { label: string; value: number; icon: LucideIcon }[] = [
+    { label: "Verified harvests", value: profile.stats.verifiedHarvests, icon: Apple },
+    { label: "Plants rescued", value: profile.stats.rescues, icon: Siren },
+    { label: "Waterings", value: profile.stats.waterings, icon: Droplet },
+    { label: "Plants planted", value: profile.stats.plantsFounded, icon: Sprout },
+    { label: "Photo updates", value: profile.stats.photos, icon: Camera },
+    { label: "All harvests", value: profile.stats.harvests, icon: ShoppingBasket },
   ];
 
   return (
     <main className="min-h-screen bg-background">
-      <div className="relative flex items-end overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-brand-primary-light">
-        <span className="absolute -right-4 -top-10 text-[13rem] leading-none opacity-20 select-none">
-          {level.emoji}
-        </span>
+      <div className="relative flex items-end overflow-hidden bg-primary">
+        <TrustLevelIcon
+          level={level.level}
+          className="absolute -right-10 -top-12 w-80 h-80 text-primary-foreground/10 select-none"
+          strokeWidth={1}
+        />
         <Link
           href="/"
-          className="absolute top-4 left-4 z-20 flex items-center gap-2 bg-black/30 text-white px-4 py-2 rounded-full hover:bg-black/50 backdrop-blur-md text-sm font-medium"
+          className="absolute top-5 left-5 md:top-8 md:left-8 z-20 flex items-center gap-2 bg-black/25 text-white px-5 py-2.5 rounded-full hover:bg-black/40 backdrop-blur-md text-sm font-medium transition"
         >
-          <MapIcon className="w-4 h-4" /> Back to map
+          <MapIcon className="w-4 h-4" strokeWidth={1.75} /> Back to map
         </Link>
 
-        <div className="relative z-10 p-6 md:p-10 pt-20 md:pt-24 text-white w-full max-w-3xl mx-auto">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="px-2 py-0.5 backdrop-blur-md bg-white/20 rounded text-xs font-bold uppercase tracking-wider">
-              {level.emoji} {level.name}
+        <div className="relative z-10 w-full max-w-2xl mx-auto px-6 pb-12 pt-28 md:px-8 md:pb-16 md:pt-32 text-primary-foreground">
+          <div className="flex items-center gap-3 mb-5 flex-wrap">
+            <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-[11px] font-semibold uppercase tracking-[0.15em]">
+              <TrustLevelIcon level={level.level} className="w-3.5 h-3.5" strokeWidth={2} /> {level.name}
             </span>
-            <span className="font-mono text-sm font-bold">⚡ {profile.karma} karma</span>
+            <span className="flex items-center gap-1 font-mono text-sm font-bold">
+              <Zap className="w-3.5 h-3.5" strokeWidth={1.75} /> {profile.karma} karma
+            </span>
           </div>
-          <h1 className="text-3xl md:text-4xl font-heading font-bold">{profile.displayName}</h1>
-          {profile.bio && <p className="text-sm md:text-base text-white/80 mt-1">{profile.bio}</p>}
+          <h1 className="text-4xl md:text-5xl font-heading font-medium tracking-tight">{profile.displayName}</h1>
+          {profile.bio && <p className="text-sm md:text-base text-primary-foreground/75 mt-3 leading-relaxed max-w-lg">{profile.bio}</p>}
           {profile.location && (
-            <p className="text-sm text-white/70 mt-1 flex items-center gap-1">
-              <MapPin className="w-3.5 h-3.5" /> {profile.location}
+            <p className="text-sm text-primary-foreground/60 mt-2 flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5" strokeWidth={1.75} /> {profile.location}
             </p>
           )}
           {next && (
-            <div className="mt-4 max-w-xs">
-              <p className="text-xs text-white/80 mb-1 font-mono">
-                {next.minKarma - profile.karma} karma to {next.emoji} {next.name}
+            <div className="mt-8 max-w-xs">
+              <p className="text-xs text-primary-foreground/75 mb-2 font-mono flex items-center gap-1.5">
+                {next.minKarma - profile.karma} karma to
+                <TrustLevelIcon level={next.level} className="w-3.5 h-3.5" strokeWidth={2} />
+                {next.name}
               </p>
               <div className="h-1.5 rounded-full bg-white/20 overflow-hidden">
                 <div className="h-full rounded-full bg-white/90" style={{ width: `${progress}%` }} />
@@ -100,15 +119,14 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto p-5 md:p-10">
+      <div className="max-w-2xl mx-auto px-6 py-10 md:px-8 md:py-16">
         {/* Contribution stats — computed from real, verifiable history */}
-        <div className="grid grid-cols-3 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-14">
           {heroStats.map((stat) => (
-            <div key={stat.label} className="bg-secondary/50 rounded-xl p-3 md:p-4 text-center border border-border/50">
-              <p className="font-mono text-xl md:text-2xl font-bold text-foreground">
-                {stat.emoji} {stat.value}
-              </p>
-              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mt-1">
+            <div key={stat.label} className="rounded-2xl border border-border bg-card px-4 py-6 text-center">
+              <stat.icon className="w-4.5 h-4.5 mx-auto mb-3 text-primary" strokeWidth={1.75} />
+              <p className="font-mono text-2xl font-bold text-foreground">{stat.value}</p>
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.15em] mt-1.5">
                 {stat.label}
               </p>
             </div>
@@ -116,67 +134,78 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
         </div>
 
         {/* Badges */}
-        <h2 className="font-heading text-lg font-bold text-foreground mb-3">Badges</h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-8">
+        <h2 className="mb-5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Badges
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-14">
           {BADGES.map((badge) => {
             const earned = profile.badges.includes(badge.id);
             return (
               <div
                 key={badge.id}
-                className={`rounded-2xl border p-3 ${
+                className={`rounded-2xl border p-5 ${
                   earned ? "bg-card border-primary/30 shadow-sm" : "bg-secondary/30 border-border/50 opacity-45"
                 }`}
                 title={badge.description}
               >
-                <p className="text-xl">{badge.emoji}</p>
-                <p className="text-sm font-bold text-foreground mt-1">{badge.name}</p>
-                <p className="text-xs text-muted-foreground leading-snug">{badge.description}</p>
+                <BadgeIcon badgeId={badge.id} className={`w-5 h-5 ${earned ? "text-primary" : "text-muted-foreground"}`} strokeWidth={1.75} />
+                <p className="text-sm font-bold text-foreground mt-3">{badge.name}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed mt-1">{badge.description}</p>
               </div>
             );
           })}
         </div>
 
         {/* Stewardships */}
-        <h2 className="font-heading text-lg font-bold text-foreground mb-3">Stewarding</h2>
+        <h2 className="mb-5 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          Stewarding
+        </h2>
         {profile.stewardships.length === 0 ? (
-          <p className="text-sm text-muted-foreground border border-dashed border-border rounded-2xl p-5 text-center mb-8">
-            Not stewarding any plants yet — find one on the map that needs a hand. 🤲
+          <p className="text-sm text-muted-foreground border border-dashed border-border rounded-3xl px-6 py-10 text-center leading-relaxed mb-14">
+            Not stewarding any plants yet — find one on the map that needs a hand.
           </p>
         ) : (
-          <div className="space-y-2 mb-8">
-            {profile.stewardships.map((stewardship) => (
-              <Link
-                key={stewardship.plantId}
-                href={`/plants/${stewardship.plantId}`}
-                className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition hover:border-primary/40 ${
-                  stewardship.active ? "bg-card border-border" : "bg-secondary/30 border-border/50 opacity-60"
-                }`}
-              >
-                <p className="text-sm font-medium text-foreground">
-                  {stewardship.emoji} {stewardship.plantName}
-                </p>
-                <span className="text-xs text-muted-foreground">
-                  {stewardship.active ? "active" : "lapsed 💤"}
-                </span>
-              </Link>
-            ))}
+          <div className="space-y-2.5 mb-14">
+            {profile.stewardships.map((stewardship) => {
+              return (
+                <Link
+                  key={stewardship.plantId}
+                  href={`/plants/${stewardship.plantId}`}
+                  className={`flex items-center justify-between gap-3 rounded-2xl border px-5 py-4 transition hover:border-primary/40 ${
+                    stewardship.active ? "bg-card border-border" : "bg-secondary/30 border-border/50 opacity-60"
+                  }`}
+                >
+                  <p className="flex items-center gap-3 text-sm font-medium text-foreground">
+                    <CategoryIcon category={stewardship.category} className="w-4 h-4 text-primary" strokeWidth={1.75} />
+                    {stewardship.plantName}
+                  </p>
+                  <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {stewardship.active ? "active" : (
+                      <>
+                        lapsed <Moon className="w-3 h-3" strokeWidth={1.75} />
+                      </>
+                    )}
+                  </span>
+                </Link>
+              );
+            })}
           </div>
         )}
 
         {/* Recent karma activity */}
-        <h2 className="font-heading text-lg font-bold text-foreground mb-3 flex items-center gap-2">
-          <Trophy className="w-4 h-4 text-primary" /> Recent karma
+        <h2 className="mb-5 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          <Zap className="w-3.5 h-3.5 text-primary" strokeWidth={1.75} /> Recent karma
         </h2>
         {profile.recentEvents.length === 0 ? (
-          <p className="text-sm text-muted-foreground border border-dashed border-border rounded-2xl p-5 text-center">
+          <p className="text-sm text-muted-foreground border border-dashed border-border rounded-3xl px-6 py-10 text-center leading-relaxed">
             No karma activity yet.
           </p>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {profile.recentEvents.map((event) => (
               <div
                 key={event.id}
-                className="flex items-center justify-between gap-3 text-sm px-4 py-2.5 rounded-xl bg-secondary/40 border border-border/50"
+                className="flex items-center justify-between gap-3 text-sm px-5 py-3.5 rounded-2xl bg-card border border-border"
               >
                 <p className="text-foreground min-w-0 truncate">
                   {EVENT_LABELS[event.kind] ?? event.kind}
@@ -189,7 +218,7 @@ export default async function ProfilePage({ params }: { params: Promise<{ id: st
                     </>
                   )}
                 </p>
-                <p className="flex items-center gap-2 shrink-0">
+                <p className="flex items-center gap-2.5 shrink-0">
                   <span
                     className={`font-mono font-bold ${
                       event.points > 0 ? "text-primary" : event.points < 0 ? "text-destructive" : "text-muted-foreground"

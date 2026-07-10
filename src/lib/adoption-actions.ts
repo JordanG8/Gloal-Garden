@@ -4,7 +4,7 @@ import { db } from '@/db';
 import { adoptions, karmaEvents, plants, species, users } from '@/db/schema';
 import { and, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
-import { requireUserId } from './auth-helpers';
+import { emailVerificationBlocker, requireUserId } from './auth-helpers';
 import {
   activityWindowDays,
   adoptionCapFor,
@@ -16,6 +16,8 @@ import type { ActionResult } from './types';
 export async function adoptPlant(plantId: number): Promise<ActionResult> {
   const userId = await requireUserId();
   if (!userId) return { ok: false, error: 'You must be signed in to adopt a plant.' };
+  const verificationError = await emailVerificationBlocker(userId);
+  if (verificationError) return { ok: false, error: verificationError };
 
   try {
     const now = new Date();

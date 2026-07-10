@@ -5,7 +5,6 @@ export interface PlantSummary {
   name: string;
   lat: number;
   lng: number;
-  emoji: string;
   category: string;
   speciesName: string;
   scientificName: string;
@@ -26,7 +25,6 @@ export interface PlantSummary {
 export interface SpeciesOption {
   id: number;
   commonName: string;
-  emoji: string;
   category: string;
 }
 
@@ -46,6 +44,9 @@ export interface SessionUser {
   name: string;
   karma: number;
   trustLevel: number;
+  emailVerified: boolean;
+  /** True when email delivery is configured and this account is unverified. */
+  verificationRequired: boolean;
 }
 
 export interface StewardEntry {
@@ -74,7 +75,7 @@ export interface UserProfile {
   stewardships: {
     plantId: number;
     plantName: string;
-    emoji: string;
+    category: string;
     active: boolean;
     adoptedAt: string;
   }[];

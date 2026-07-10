@@ -6,6 +6,7 @@ import { X, MapPin, ChevronUp } from "lucide-react";
 import type { ObservationEntry, PlantSummary, SessionUser } from "@/lib/types";
 import { STATUS_BADGE_CLASSES } from "@/lib/plant-status";
 import { daysAgoLabel } from "@/lib/format";
+import { CategoryIcon } from "@/lib/plant-icons";
 import CareActions from "./plant-care";
 import ActivityFeed from "./activity-feed";
 import StewardSection from "./steward-section";
@@ -70,7 +71,7 @@ export default function PlantPanel({
   return (
     <>
       <div
-        className={`absolute md:relative z-20 bottom-0 left-0 w-full md:w-[400px] h-[75vh] md:h-full bg-background border-t md:border-t-0 md:border-l border-border shadow-2xl flex flex-col ${
+        className={`absolute md:relative z-20 bottom-0 left-0 w-full md:w-[420px] h-[75vh] md:h-full bg-background border-t md:border-t-0 md:border-l border-border shadow-2xl flex flex-col ${
           dragging ? "" : "transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)]"
         } ${
           plant ? "translate-y-0 md:translate-x-0" : "translate-y-full md:translate-y-0 md:translate-x-full md:w-0 md:border-l-0 overflow-hidden"
@@ -94,17 +95,18 @@ export default function PlantPanel({
       {/* Full-page expansion overlay: the card "becomes" the page. */}
       {expanding && plant && (
         <div className="fixed inset-0 z-50 bg-background animate-[panel-expand_0.45s_cubic-bezier(0.32,0.72,0,1)_forwards] flex flex-col">
-          <div className="relative h-64 shrink-0 flex items-end overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-brand-primary-light">
-            <span className="absolute -right-4 -top-6 text-[11rem] leading-none opacity-20 select-none">{plant.emoji}</span>
-            <div className="relative z-10 p-6 text-white">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-3xl">{plant.emoji}</span>
-                <span className={`px-2 py-0.5 backdrop-blur-md rounded text-xs font-bold uppercase tracking-wider ${STATUS_BADGE_CLASSES[plant.status] ?? "bg-primary/80"}`}>
-                  {plant.status.replace(/_/g, " ")}
-                </span>
-              </div>
-              <h2 className="text-3xl font-heading font-bold">{plant.name}</h2>
-              <p className="text-sm text-white/80 italic">{plant.scientificName}</p>
+          <div className="relative h-64 shrink-0 flex items-end overflow-hidden bg-primary">
+            <CategoryIcon
+              category={plant.category}
+              className="absolute -right-8 -top-10 w-64 h-64 text-primary-foreground/10 select-none"
+              strokeWidth={1}
+            />
+            <div className="relative z-10 p-8 text-primary-foreground">
+              <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.15em] text-white mb-4 ${STATUS_BADGE_CLASSES[plant.status] ?? "bg-primary/80"}`}>
+                {plant.status.replace(/_/g, " ")}
+              </span>
+              <h2 className="text-3xl font-heading font-medium">{plant.name}</h2>
+              <p className="text-sm text-primary-foreground/70 italic mt-1">{plant.scientificName}</p>
             </div>
           </div>
           <div className="flex-1 flex items-start justify-center pt-10">
@@ -159,10 +161,14 @@ function PanelContent({
     <>
       {/* Header with pull-up handle */}
       <div
-        className="relative h-44 shrink-0 flex items-end overflow-hidden bg-gradient-to-br from-primary via-primary/90 to-brand-primary-light cursor-grab active:cursor-grabbing touch-none select-none"
+        className="relative h-48 shrink-0 flex items-end overflow-hidden bg-primary cursor-grab active:cursor-grabbing touch-none select-none"
         {...handleProps}
       >
-        <span className="absolute -right-4 -top-6 text-[9rem] leading-none opacity-20 select-none">{plant.emoji}</span>
+        <CategoryIcon
+          category={plant.category}
+          className="absolute -right-6 -top-8 w-48 h-48 text-primary-foreground/10 select-none"
+          strokeWidth={1}
+        />
 
         {/* Grabber: pull up (or tap) to open the full plant page */}
         <button
@@ -183,44 +189,41 @@ function PanelContent({
           className="absolute top-4 right-4 z-20 bg-black/30 text-white p-2 rounded-full hover:bg-black/50 backdrop-blur-md"
           aria-label="Close panel"
         >
-          <X className="w-5 h-5" />
+          <X className="w-5 h-5" strokeWidth={1.75} />
         </button>
 
-        <div className="relative z-10 p-4 text-white pointer-events-none">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-2xl">{plant.emoji}</span>
-            <span className={`px-2 py-0.5 backdrop-blur-md rounded text-xs font-bold uppercase tracking-wider ${STATUS_BADGE_CLASSES[plant.status] ?? "bg-primary/80"}`}>
-              {plant.status.replace(/_/g, " ")}
-            </span>
-          </div>
-          <h2 className="text-2xl font-heading font-bold">{plant.name}</h2>
-          <p className="text-sm text-white/80 italic">{plant.scientificName}</p>
+        <div className="relative z-10 p-6 pb-7 text-primary-foreground pointer-events-none">
+          <span className={`inline-block px-3 py-1 rounded-full text-[11px] font-semibold uppercase tracking-[0.15em] text-white mb-3 ${STATUS_BADGE_CLASSES[plant.status] ?? "bg-primary/80"}`}>
+            {plant.status.replace(/_/g, " ")}
+          </span>
+          <h2 className="text-2xl font-heading font-medium">{plant.name}</h2>
+          <p className="text-sm text-primary-foreground/70 italic mt-0.5">{plant.scientificName}</p>
         </div>
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto p-5 pb-24 md:pb-5">
-        <div className="grid grid-cols-3 gap-3 mb-5">
-          <div className="bg-secondary/50 rounded-xl p-3 text-center border border-border/50">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Planted</p>
+      <div className="flex-1 overflow-y-auto px-6 pt-7 pb-24 md:pb-10">
+        <div className="grid grid-cols-3 divide-x divide-border rounded-2xl border border-border bg-card mb-8">
+          <div className="px-2 py-4 text-center">
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.15em] mb-1.5">Planted</p>
             <p className="font-mono text-sm font-bold text-foreground">{daysAgoLabel(plant.plantedAt)}</p>
           </div>
-          <div className="bg-secondary/50 rounded-xl p-3 text-center border border-border/50">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Watered</p>
+          <div className="px-2 py-4 text-center">
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.15em] mb-1.5">Watered</p>
             <p className="font-mono text-sm font-bold text-foreground">{daysAgoLabel(plant.lastWateredAt)}</p>
           </div>
-          <div className="bg-secondary/50 rounded-xl p-3 text-center border border-border/50">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-1">Planted by</p>
+          <div className="px-2 py-4 text-center">
+            <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-[0.15em] mb-1.5">Planted by</p>
             <p className="font-mono text-sm font-bold text-foreground truncate px-1">{plant.plantedByName}</p>
           </div>
         </div>
 
         {(plant.description || plant.accessNotes) && (
-          <div className="mb-5 space-y-2">
+          <div className="mb-8 space-y-3">
             {plant.description && <p className="text-sm text-foreground leading-relaxed">{plant.description}</p>}
             {plant.accessNotes && (
-              <p className="text-sm text-muted-foreground flex items-start gap-1.5">
-                <MapPin className="w-4 h-4 mt-0.5 shrink-0" /> {plant.accessNotes}
+              <p className="text-sm text-muted-foreground flex items-start gap-2 leading-relaxed">
+                <MapPin className="w-4 h-4 mt-0.5 shrink-0" strokeWidth={1.75} /> {plant.accessNotes}
               </p>
             )}
           </div>

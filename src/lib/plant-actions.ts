@@ -4,7 +4,7 @@ import { db } from '@/db';
 import { adoptions, karmaEvents, observations, plants, species, users } from '@/db/schema';
 import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
-import { requireUserId } from './auth-helpers';
+import { emailVerificationBlocker, requireUserId } from './auth-helpers';
 import { computeStatus } from './plant-status';
 import {
   activityWindowDays,
@@ -214,7 +214,7 @@ async function awardBadges(userId: number, kinds: KarmaKind[]): Promise<string[]
     .update(users)
     .set({ badges: [...currentBadges, ...earned.map((b) => b.id)] })
     .where(eq(users.id, userId));
-  return earned.map((b) => `${b.name} ${b.emoji}`);
+  return earned.map((b) => b.name);
 }
 
 /**
@@ -288,6 +288,8 @@ export async function createPlant(input: {
 }): Promise<ActionResult> {
   const userId = await requireUserId();
   if (!userId) return { ok: false, error: 'You must be signed in to add a plant.' };
+  const verificationError = await emailVerificationBlocker(userId);
+  if (verificationError) return { ok: false, error: verificationError };
 
   if (
     !Number.isFinite(input.lat) || !Number.isFinite(input.lng) ||
@@ -381,11 +383,19 @@ export async function logCareAction(input: {
 }): Promise<ActionResult> {
   const userId = await requireUserId();
   if (!userId) return { ok: false, error: 'You must be signed in to log care actions.' };
+  const verificationError = await emailVerificationBlocker(userId);
+  if (verificationError) return { ok: false, error: verificationError };
 
   const caption = input.caption?.trim().slice(0, 500) || null;
   const photoUrl = input.photoUrl?.trim() || null;
-  if (photoUrl && !/^https?:\/\//.test(photoUrl)) {
-    return { ok: false, error: 'Photo URL must start with http:// or https://.' };
+  // Uploads resolve to a hosted URL, or an inline data URL when no blob
+  // storage is configured (kept small by client-side compression).
+  const validPhoto =
+    !photoUrl ||
+    /^https?:\/\//.test(photoUrl) ||
+    (/^data:image\/(jpeg|png|webp);base64,/.test(photoUrl) && photoUrl.length <= 2_100_000);
+  if (!validPhoto) {
+    return { ok: false, error: 'That photo could not be attached. Please try again.' };
   }
 
   let newBadges: string[] = [];

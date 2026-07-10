@@ -21,9 +21,9 @@ const LOG_LABELS: Record<string, string> = {
 export default function ActivityFeed({ logs }: { logs: ObservationEntry[] | null }) {
   return (
     <div className="mb-4">
-      <h3 className="font-heading text-lg font-bold text-foreground mb-4 flex items-center justify-between">
-        Activity Feed
-        <span className="text-xs font-sans font-normal text-muted-foreground bg-secondary px-2 py-1 rounded-full">
+      <h3 className="mb-5 flex items-center justify-between text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        Activity
+        <span className="rounded-full bg-secondary px-2.5 py-1 font-sans text-xs font-normal normal-case tracking-normal text-muted-foreground">
           {logs ? `${logs.length} logs` : "loading…"}
         </span>
       </h3>
@@ -35,9 +35,9 @@ export default function ActivityFeed({ logs }: { logs: ObservationEntry[] | null
           ))}
         </div>
       ) : logs.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground text-sm border border-dashed border-border rounded-2xl">
-          <Sprout className="w-6 h-6 mx-auto mb-2 opacity-50" />
-          No activity yet. Be the first to check on this plant!
+        <div className="text-center py-12 px-6 text-muted-foreground text-sm border border-dashed border-border rounded-3xl leading-relaxed">
+          <Sprout className="w-6 h-6 mx-auto mb-3 opacity-50" strokeWidth={1.5} />
+          No activity yet. Be the first to check on this plant.
         </div>
       ) : (
         <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-border before:to-transparent">
