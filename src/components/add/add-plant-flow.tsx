@@ -16,6 +16,10 @@ import { IconClose, IconChevronDown, IconStar, IconSearch, IconLocate } from '@/
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
+// Client-only sentinel for the "Other — name it yourself" option in the
+// species picker; never sent to the server as a real species id.
+const CUSTOM_SPECIES_ID = -1;
+
 function speciesName(s: SpeciesOption, locale: string): string {
   return locale === 'he' && s.commonNameHe ? s.commonNameHe : s.commonName;
 }
@@ -35,10 +39,12 @@ export function AddPlantFlow({
   const [speciesOpen, setSpeciesOpen] = useState(false);
   const [speciesQuery, setSpeciesQuery] = useState('');
   const [chosen, setChosen] = useState<SpeciesOption | null>(null);
+  const [customSpeciesName, setCustomSpeciesName] = useState('');
   const [nickname, setNickname] = useState('');
   const [accessNotes, setAccessNotes] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [spot, setSpot] = useState(center);
+  const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
   const [doneResult, setDoneResult] = useState<Awaited<ReturnType<typeof createPlant>> | null>(null);
@@ -52,15 +58,22 @@ export function AddPlantFlow({
     );
   }, [speciesList, speciesQuery]);
 
+  const isCustomSpecies = chosen?.id === CUSTOM_SPECIES_ID;
+
   function submit() {
     if (!chosen) {
       setSpeciesOpen(true);
       return;
     }
+    if (isCustomSpecies && !customSpeciesName.trim()) {
+      setError(dict.add.customNameRequired);
+      return;
+    }
     setError('');
     startTransition(async () => {
       const res = await createPlant({
-        speciesId: chosen.id,
+        speciesId: isCustomSpecies ? 0 : chosen.id,
+        customSpeciesName: isCustomSpecies ? customSpeciesName : undefined,
         lat: spot.lat,
         lng: spot.lng,
         nickname,
@@ -84,7 +97,7 @@ export function AddPlantFlow({
         breakdown={doneResult.breakdown}
         newBadges={doneResult.newBadges ?? []}
         userName={user.name}
-        plantName={nickname || (chosen ? speciesName(chosen, locale) : '')}
+        plantName={nickname || (isCustomSpecies ? customSpeciesName : chosen ? speciesName(chosen, locale) : '')}
         onDone={() => router.push(`/${locale}`)}
       />
     );
@@ -129,23 +142,38 @@ export function AddPlantFlow({
         </div>
         <button
           type="button"
-          onClick={() =>
-            navigator.geolocation?.getCurrentPosition(
+          disabled={locating}
+          onClick={() => {
+            if (!navigator.geolocation) {
+              setError(dict.add.locationError);
+              return;
+            }
+            setLocating(true);
+            setError('');
+            navigator.geolocation.getCurrentPosition(
               (pos) => {
-                mapRef.current?.flyTo({
-                  center: [pos.coords.longitude, pos.coords.latitude],
-                  zoom: 17,
-                  duration: 900,
-                });
+                const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+                // Set the pin directly from the GPS fix — don't depend on the
+                // map's onMoveEnd firing after flyTo.
+                setSpot(loc);
+                mapRef.current?.flyTo({ center: [loc.lng, loc.lat], zoom: 17, duration: 900 });
+                setLocating(false);
               },
-              () => {},
+              () => {
+                setError(dict.add.locationError);
+                setLocating(false);
+              },
               { enableHighAccuracy: true, timeout: 8000 }
-            )
-          }
+            );
+          }}
           aria-label={dict.add.useMyLocation}
-          className="absolute end-2.5 top-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-white text-forest shadow-[0_2px_10px_rgba(32,37,28,0.18)]"
+          className="absolute end-2.5 top-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-white text-forest shadow-[0_2px_10px_rgba(32,37,28,0.18)] disabled:opacity-60"
         >
-          <IconLocate size={16} className="rtl:-scale-x-100" />
+          {locating ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-forest border-t-transparent" />
+          ) : (
+            <IconLocate size={16} className="rtl:-scale-x-100" />
+          )}
         </button>
         <div className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-[11.5px] font-semibold text-muted-foreground">
           {dict.add.dragMap}
@@ -162,15 +190,31 @@ export function AddPlantFlow({
           <span className="flex flex-col gap-0.5">
             <span className="microlabel text-bark">{dict.add.species}</span>
             <span className={`text-[15px] font-semibold ${chosen ? 'text-ink' : 'text-faint'}`}>
-              {chosen
-                ? `${chosen.emoji} ${speciesName(chosen, locale)} · ${
-                    dict.add.categories[chosen.category as keyof typeof dict.add.categories] ?? chosen.category
-                  }`
-                : dict.add.chooseSpecies}
+              {isCustomSpecies
+                ? `${chosen!.emoji} ${dict.add.otherSpecies}`
+                : chosen
+                  ? `${chosen.emoji} ${speciesName(chosen, locale)} · ${
+                      dict.add.categories[chosen.category as keyof typeof dict.add.categories] ?? chosen.category
+                    }`
+                  : dict.add.chooseSpecies}
             </span>
           </span>
           <IconChevronDown size={14} className="text-muted-foreground" />
         </button>
+
+        {isCustomSpecies && (
+          <label className="animate-pop flex flex-col gap-0.5 rounded-2xl border border-forest bg-card px-[18px] py-3.5 transition-all focus-within:shadow-[0_0_0_3px_rgba(23,64,43,.08)]">
+            <span className="microlabel text-bark">{dict.add.customName}</span>
+            <input
+              autoFocus
+              value={customSpeciesName}
+              onChange={(e) => setCustomSpeciesName(e.target.value)}
+              placeholder={dict.add.customNamePlaceholder}
+              maxLength={80}
+              className="w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-faint"
+            />
+          </label>
+        )}
 
         <label className="flex flex-col gap-0.5 rounded-2xl border border-line bg-card px-[18px] py-3.5 transition-all focus-within:border-forest focus-within:shadow-[0_0_0_3px_rgba(23,64,43,.08)]">
           <span className="microlabel text-bark">{dict.add.nickname}</span>
@@ -248,6 +292,21 @@ export function AddPlantFlow({
             </div>
             <div className="hide-scrollbar flex-1 overflow-y-auto px-5 pb-[max(env(safe-area-inset-bottom),20px)]">
               <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChosen({ id: CUSTOM_SPECIES_ID, commonName: '', commonNameHe: null, category: 'other', emoji: '✏️' });
+                    setSpeciesOpen(false);
+                  }}
+                  className={`flex items-center gap-3 rounded-2xl border border-dashed px-4 py-3 text-start transition ${
+                    isCustomSpecies ? 'border-forest bg-moss' : 'border-[#C9BFA8] bg-card hover:bg-chip'
+                  }`}
+                >
+                  <span className="text-[22px]">✏️</span>
+                  <span className="flex flex-col">
+                    <span className="text-[14.5px] font-semibold text-ink">{dict.add.otherSpecies}</span>
+                  </span>
+                </button>
                 {filteredSpecies.map((s) => (
                   <button
                     key={s.id}

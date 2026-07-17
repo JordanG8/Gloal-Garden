@@ -62,6 +62,10 @@ export const species = pgTable('species', {
 export const plants = pgTable('plants', {
   id: serial('id').primaryKey(),
   speciesId: integer('species_id').references(() => species.id).notNull(),
+  // Set when the planter picked "Other" and typed their own name instead of
+  // choosing from the species list; speciesId still points at the generic
+  // CUSTOM_SPECIES_MARKER row so care-cadence defaults (watering, etc.) work.
+  customSpeciesName: text('custom_species_name'),
   nickname: text('nickname'),
   lat: doublePrecision('lat').notNull(),
   lng: doublePrecision('lng').notNull(),

@@ -7,15 +7,10 @@ import {
   IconHeart,
   IconLeafPair,
 } from '@/components/icons';
+import { pinStatus } from '@/lib/plant-status';
 import type { PlantSummary } from '@/lib/types';
 
-export function pinStatus(plant: PlantSummary): string {
-  if (plant.status === 'needs_attention' || plant.status === 'diseased') return 'needs_attention';
-  if (plant.status === 'needs_water') return 'needs_water';
-  if (plant.status === 'ready_to_harvest') return 'ready_to_harvest';
-  if (plant.upForAdoption) return 'steward';
-  return plant.status;
-}
+export { pinStatus };
 
 function PinIcon({ status, size }: { status: string; size: number }) {
   const common = { size, className: 'text-white' };

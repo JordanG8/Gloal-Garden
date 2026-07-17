@@ -48,6 +48,24 @@ export function computeStatus(plant: StatusPlantInput, speciesInfo: StatusSpecie
   return 'growing';
 }
 
+/**
+ * Derives the map-pin / status-pill status from a plant summary: sticky
+ * trouble statuses win, then time-derived ones, then "up for adoption" is
+ * surfaced as its own pseudo-status ("steward"). Pure logic — kept out of
+ * plant-marker.tsx (a 'use client' file) so server components can call it
+ * without triggering a "called a client function from the server" crash.
+ */
+export function pinStatus(plant: {
+  status: string;
+  upForAdoption: boolean;
+}): string {
+  if (plant.status === 'needs_attention' || plant.status === 'diseased') return 'needs_attention';
+  if (plant.status === 'needs_water') return 'needs_water';
+  if (plant.status === 'ready_to_harvest') return 'ready_to_harvest';
+  if (plant.upForAdoption) return 'steward';
+  return plant.status;
+}
+
 // Tailwind classes for the status badge shown on plant heroes (deep green
 // background, white text — "growing" gets a translucent pill so it doesn't
 // vanish into the hero).

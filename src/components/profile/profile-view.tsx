@@ -4,7 +4,7 @@ import type { BadgeMetric } from '@/lib/karma';
 import { BADGES, trustLevelFor, nextTrustLevel } from '@/lib/karma';
 import { getDict, fill, type Locale } from '@/i18n';
 import { formatNumber, monthYear, timeAgo } from '@/lib/format';
-import { Avatar } from '@/components/avatar';
+import { ZoomableAvatar } from '@/components/profile/zoomable-avatar';
 import { LevelChip } from '@/components/pills';
 import { LevelBar } from '@/components/stat';
 import { BadgeTile } from '@/components/badge-art';
@@ -43,7 +43,7 @@ export function ProfileView({
     <div className="flex flex-col gap-4">
       {/* Header */}
       <div className="animate-rise flex items-center gap-4">
-        <Avatar name={profile.displayName} id={profile.id} src={profile.avatar} size={72} ring />
+        <ZoomableAvatar name={profile.displayName} id={profile.id} src={profile.avatar} size={72} ring />
         <div className="flex min-w-0 flex-col gap-1">
           <h1 className="truncate font-display text-[32px] font-bold uppercase leading-none text-ink">
             {profile.displayName}

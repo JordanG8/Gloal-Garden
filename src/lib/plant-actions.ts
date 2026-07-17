@@ -26,6 +26,32 @@ import type { ActionResult } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Sentinel scientific_name for the generic species row that "Other — name it
+// yourself" plants point their FK at (seeded by migration 0004; created here
+// too in case a fresh DB hasn't run it yet).
+const CUSTOM_SPECIES_MARKER = '__custom__';
+
+async function getOrCreateCustomSpeciesId(): Promise<number> {
+  const [existing] = await db
+    .select({ id: species.id })
+    .from(species)
+    .where(eq(species.scientificName, CUSTOM_SPECIES_MARKER))
+    .limit(1);
+  if (existing) return existing.id;
+
+  const [created] = await db
+    .insert(species)
+    .values({
+      commonName: 'Custom Plant',
+      scientificName: CUSTOM_SPECIES_MARKER,
+      category: 'other',
+      emoji: '🌱',
+      wateringFrequencyDays: 7,
+    })
+    .returning({ id: species.id });
+  return created.id;
+}
+
 async function earnedInLast24h(userId: number, now: Date): Promise<number> {
   const [row] = await db
     .select({ total: sql<number>`coalesce(sum(${karmaEvents.points}), 0)::int` })
@@ -280,6 +306,8 @@ export async function createPlant(input: {
   description: string;
   accessNotes: string;
   photoUrl?: string;
+  /** Free-typed name when the planter chose "Other" instead of a species. */
+  customSpeciesName?: string;
 }): Promise<ActionResult> {
   const userId = await requireUserId();
   if (!userId) return { ok: false, error: 'You must be signed in to add a plant.' };
@@ -292,7 +320,9 @@ export async function createPlant(input: {
   ) {
     return { ok: false, error: 'Invalid location.' };
   }
-  if (!Number.isInteger(input.speciesId)) {
+
+  const customSpeciesName = input.customSpeciesName?.trim().slice(0, 80) || null;
+  if (!customSpeciesName && !Number.isInteger(input.speciesId)) {
     return { ok: false, error: 'Please choose a species.' };
   }
 
@@ -334,10 +364,13 @@ export async function createPlant(input: {
         ),
     ]);
 
+    const speciesId = customSpeciesName ? await getOrCreateCustomSpeciesId() : input.speciesId;
+
     const [plant] = await db
       .insert(plants)
       .values({
-        speciesId: input.speciesId,
+        speciesId,
+        customSpeciesName,
         lat: input.lat,
         lng: input.lng,
         plantedBy: userId,

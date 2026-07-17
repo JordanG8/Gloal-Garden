@@ -11,7 +11,7 @@ import { speciesDisplayName } from '@/lib/msg';
 import { timeAgo } from '@/lib/format';
 import { StatusPill } from '@/components/pills';
 import { PlantImage } from '@/components/plant-art';
-import { pinStatus } from '@/components/map/plant-marker';
+import { pinStatus } from '@/lib/plant-status';
 import { IconForward, IconHeartOutline } from '@/components/icons';
 
 function PlantCard({ plant, locale, dict }: { plant: PlantSummary; locale: Locale; dict: Dictionary }) {
