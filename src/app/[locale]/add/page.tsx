@@ -4,11 +4,6 @@ import { getGardenData } from '@/lib/data';
 import { getSessionUser } from '@/lib/auth-helpers';
 import { AddPlantFlow } from '@/components/add/add-plant-flow';
 
-export const unstable_instant = {
-  prefetch: 'runtime',
-  samples: [{ params: { locale: 'en' } }, { params: { locale: 'he' } }],
-};
-
 const FALLBACK_CENTER = { lat: 32.5185, lng: 35.0047 };
 
 async function AddContent({ locale }: { locale: string }) {

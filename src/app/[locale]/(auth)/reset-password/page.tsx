@@ -4,14 +4,6 @@ import { getDict, isLocale, type Locale, type Dictionary } from '@/i18n';
 import { AuthHeader } from '@/components/auth/auth-header';
 import { ResetPasswordForm } from '@/components/auth/auth-forms';
 
-export const unstable_instant = {
-  prefetch: 'runtime',
-  samples: [
-    { params: { locale: 'en' }, searchParams: { token: null } },
-    { params: { locale: 'he' }, searchParams: { token: null } },
-  ],
-};
-
 async function TokenGate({
   searchParams,
   dict,

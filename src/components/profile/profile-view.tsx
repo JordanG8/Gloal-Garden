@@ -55,7 +55,7 @@ export function ProfileView({
           </p>
           <div className="flex gap-1.5">
             <LevelChip label={levelName(level.name)} />
-            <LevelChip label={fill(dict.badges.count, { n: profile.badges.length })} gold />
+            <LevelChip label={profile.badges.length === 1 ? dict.badges.countOne : fill(dict.badges.count, { n: profile.badges.length })} gold />
           </div>
         </div>
       </div>

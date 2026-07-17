@@ -251,6 +251,7 @@ export const en = {
 
   badges: {
     count: '{n} badges',
+    countOne: '1 badge',
     of: '{have} of {all}',
     first_sprout: { name: 'First Sprout', desc: 'Planted your first plant' },
     green_thumb: { name: 'Green Thumb', desc: 'Planted 10 plants' },

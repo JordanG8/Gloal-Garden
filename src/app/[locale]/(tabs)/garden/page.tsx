@@ -14,11 +14,6 @@ import { PlantImage } from '@/components/plant-art';
 import { pinStatus } from '@/components/map/plant-marker';
 import { IconForward, IconHeartOutline } from '@/components/icons';
 
-export const unstable_instant = {
-  prefetch: 'runtime',
-  samples: [{ params: { locale: 'en' } }, { params: { locale: 'he' } }],
-};
-
 function PlantCard({ plant, locale, dict }: { plant: PlantSummary; locale: Locale; dict: Dictionary }) {
   return (
     <Link

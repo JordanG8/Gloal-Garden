@@ -3,11 +3,6 @@ import { getDict, isLocale, type Locale } from '@/i18n';
 import { AuthHeader } from '@/components/auth/auth-header';
 import { SignupForm } from '@/components/auth/auth-forms';
 
-export const unstable_instant = {
-  prefetch: 'runtime',
-  samples: [{ params: { locale: 'en' } }, { params: { locale: 'he' } }],
-};
-
 export default async function SignupPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
   const locale: Locale = isLocale(raw) ? raw : 'en';

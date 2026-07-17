@@ -17,8 +17,6 @@ import { pinStatus } from '@/components/map/plant-marker';
 import { IconPin, IconCamera, IconDropFilled, IconBasketFilled, IconAlert, IconCheck, IconForward } from '@/components/icons';
 import type { ObservationEntry } from '@/lib/types';
 
-export const unstable_instant = false;
-
 function FeedLine({ entry, dict, locale }: { entry: ObservationEntry; dict: Dictionary; locale: Locale }) {
   const icons: Record<string, React.ReactNode> = {
     water: <IconDropFilled size={13} className="text-water" />,
@@ -206,21 +204,24 @@ function PlantSkeleton() {
   );
 }
 
-export default async function PlantPage({
-  params,
-}: {
-  params: Promise<{ locale: string; id: string }>;
-}) {
+async function ParamsGate({ params }: { params: Promise<{ locale: string; id: string }> }) {
   const { locale: rawLocale, id: rawId } = await params;
   const locale: Locale = isLocale(rawLocale) ? rawLocale : 'en';
   const id = parseInt(rawId, 10);
   if (!Number.isFinite(id)) notFound();
+  return <PlantContent id={id} locale={locale} />;
+}
 
+export default function PlantPage({
+  params,
+}: {
+  params: Promise<{ locale: string; id: string }>;
+}) {
   return (
     <div className="min-h-dvh bg-canvas">
       <div className="relative mx-auto w-full max-w-[520px] bg-cream shadow-[0_0_60px_rgba(32,37,28,0.08)]">
         <Suspense fallback={<PlantSkeleton />}>
-          <PlantContent id={id} locale={locale} />
+          <ParamsGate params={params} />
         </Suspense>
       </div>
     </div>

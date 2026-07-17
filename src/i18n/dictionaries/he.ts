@@ -253,6 +253,7 @@ export const he: Dictionary = {
 
   badges: {
     count: '{n} תגים',
+    countOne: 'תג אחד',
     of: '{have} מתוך {all}',
     first_sprout: { name: 'נבט ראשון', desc: 'שתלתם את הצמח הראשון' },
     green_thumb: { name: 'יד ירוקה', desc: 'שתלתם 10 צמחים' },

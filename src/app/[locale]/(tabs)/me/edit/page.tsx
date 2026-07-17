@@ -8,8 +8,6 @@ import { getDict, isLocale, type Locale } from '@/i18n';
 import { ProfileEditForm } from '@/components/profile/profile-edit-form';
 import { BackButton } from '@/components/plant/back-button';
 
-export const unstable_instant = false;
-
 async function EditContent({ locale }: { locale: Locale }) {
   const userId = await requireUserId();
   if (!userId) redirect(`/${locale}/welcome`);

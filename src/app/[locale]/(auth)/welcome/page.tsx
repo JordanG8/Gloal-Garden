@@ -6,11 +6,6 @@ import { getDict, isLocale, type Locale } from '@/i18n';
 import { formatNumber } from '@/lib/format';
 import { WelcomePager } from '@/components/auth/welcome-pager';
 
-export const unstable_instant = {
-  prefetch: 'runtime',
-  samples: [{ params: { locale: 'en' } }, { params: { locale: 'he' } }],
-};
-
 async function CommunityStats({ locale }: { locale: Locale }) {
   const dict = getDict(locale);
   let counts = { plants: 0, gardeners: 0, harvests: 0 };

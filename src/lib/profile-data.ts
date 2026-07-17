@@ -1,3 +1,4 @@
+import { connection } from 'next/server';
 import { db } from '@/db';
 import { adoptions, karmaEvents, observations, plants, species, users } from '@/db/schema';
 import { and, desc, eq, gt, sql } from 'drizzle-orm';
@@ -7,6 +8,8 @@ import type { LeaderboardRow, UserProfile } from './types';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function getUserProfile(id: number): Promise<UserProfile | null> {
+  // Uses the current time before any IO — mark the render as request-time.
+  await connection();
   try {
     const weekAgo = new Date(Date.now() - 7 * DAY_MS);
     const [userRows, statRows, rescueRows, stewardshipRows, eventRows, weekRows] = await Promise.all([
@@ -129,6 +132,8 @@ export async function getUserProfile(id: number): Promise<UserProfile | null> {
 }
 
 export async function getLeaderboard(): Promise<LeaderboardRow[]> {
+  // Uses the current time before any IO — mark the render as request-time.
+  await connection();
   try {
     const weekAgo = new Date(Date.now() - 7 * DAY_MS);
     const [rows, weekRows] = await Promise.all([

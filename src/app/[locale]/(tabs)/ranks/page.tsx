@@ -3,11 +3,6 @@ import { getLeaderboard } from '@/lib/profile-data';
 import { getSessionUser } from '@/lib/auth-helpers';
 import { RanksBoard } from '@/components/ranks/ranks-board';
 
-export const unstable_instant = {
-  prefetch: 'runtime',
-  samples: [{ params: { locale: 'en' } }, { params: { locale: 'he' } }],
-};
-
 async function RanksContent() {
   const [rows, user] = await Promise.all([getLeaderboard(), getSessionUser()]);
   return <RanksBoard rows={rows} viewerId={user?.id ?? null} />;

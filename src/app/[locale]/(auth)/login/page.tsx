@@ -4,14 +4,6 @@ import { getDict, isLocale, type Locale } from '@/i18n';
 import { AuthHeader } from '@/components/auth/auth-header';
 import { LoginForm } from '@/components/auth/auth-forms';
 
-export const unstable_instant = {
-  prefetch: 'runtime',
-  samples: [
-    { params: { locale: 'en' }, searchParams: { reset: null, verified: null } },
-    { params: { locale: 'he' }, searchParams: { reset: null, verified: null } },
-  ],
-};
-
 async function FormWithNotes({ searchParams }: { searchParams: Promise<{ reset?: string; verified?: string }> }) {
   const { reset, verified } = await searchParams;
   return <LoginForm reset={reset === '1'} verified={verified === '1'} />;

@@ -118,7 +118,7 @@ export function RanksBoard({ rows, viewerId }: { rows: LeaderboardRow[]; viewerI
                   {isViewer && ` · ${dict.ranks.you}`}
                 </span>
                 <span className={`text-[11px] ${isViewer ? 'text-[#4E7C5E]' : 'text-faint'}`}>
-                  {levelName(row.karma, dict)} · {fill(dict.badges.count, { n: row.badges.length })}
+                  {levelName(row.karma, dict)} · {row.badges.length === 1 ? dict.badges.countOne : fill(dict.badges.count, { n: row.badges.length })}
                 </span>
               </div>
               <div className="text-end">

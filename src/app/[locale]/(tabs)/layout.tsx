@@ -3,8 +3,6 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { TabBar } from '@/components/tab-bar';
 
-export const unstable_instant = false;
-
 /**
  * Signed-out visitors get bounced to the onboarding flow. Runs inside
  * Suspense so tab shells stay instantly navigable.

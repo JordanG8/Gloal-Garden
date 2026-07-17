@@ -6,11 +6,6 @@ import { isLocale, type Locale } from '@/i18n';
 import { ProfileView } from '@/components/profile/profile-view';
 import { MeActions } from '@/components/profile/me-actions';
 
-export const unstable_instant = {
-  prefetch: 'runtime',
-  samples: [{ params: { locale: 'en' } }, { params: { locale: 'he' } }],
-};
-
 async function MeContent({ locale }: { locale: Locale }) {
   const user = await getSessionUser();
   if (!user) redirect(`/${locale}/welcome`);

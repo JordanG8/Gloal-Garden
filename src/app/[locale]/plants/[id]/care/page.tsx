@@ -4,8 +4,6 @@ import { getPlantDetail } from '@/lib/data';
 import { getSessionUser } from '@/lib/auth-helpers';
 import { CareFlow } from '@/components/care/care-flow';
 
-export const unstable_instant = false;
-
 async function CareContent({
   id,
   locale,
@@ -41,7 +39,7 @@ function CareSkeleton() {
   );
 }
 
-export default async function CarePage({
+async function ParamsGate({
   params,
   searchParams,
 }: {
@@ -51,12 +49,21 @@ export default async function CarePage({
   const { locale, id: rawId } = await params;
   const id = parseInt(rawId, 10);
   if (!Number.isFinite(id)) notFound();
+  return <CareContent id={id} locale={locale} searchParams={searchParams} />;
+}
 
+export default function CarePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string; id: string }>;
+  searchParams: Promise<{ action?: string }>;
+}) {
   return (
     <div className="min-h-dvh bg-canvas">
       <div className="relative mx-auto w-full max-w-[520px] bg-cream shadow-[0_0_60px_rgba(32,37,28,0.08)]">
         <Suspense fallback={<CareSkeleton />}>
-          <CareContent id={id} locale={locale} searchParams={searchParams} />
+          <ParamsGate params={params} searchParams={searchParams} />
         </Suspense>
       </div>
     </div>

@@ -46,7 +46,7 @@ export function WelcomePager({ locale, stats }: { locale: string; stats: ReactNo
   const [page, setPage] = useState(0);
 
   return (
-    <div className="relative flex-1 overflow-hidden">
+    <div className="relative h-dvh overflow-hidden">
       <div
         className="flex h-full transition-transform duration-500 [transition-timing-function:cubic-bezier(0.32,0.72,0,1)]"
         style={{ transform: `translateX(calc(${page * -100}% * var(--dir, 1)))` }}

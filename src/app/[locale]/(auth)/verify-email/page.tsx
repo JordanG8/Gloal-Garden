@@ -9,14 +9,6 @@ import { ResendVerification } from '@/components/auth/auth-forms';
 import { getDict, isLocale, type Locale, type Dictionary } from '@/i18n';
 import { IconMail, IconCheck, IconAlert } from '@/components/icons';
 
-export const unstable_instant = {
-  prefetch: 'runtime',
-  samples: [
-    { params: { locale: 'en' }, searchParams: { token: null } },
-    { params: { locale: 'he' }, searchParams: { token: null } },
-  ],
-};
-
 function Illustration({ kind }: { kind: 'mail' | 'check' | 'expired' }) {
   const tones = {
     mail: { bg: 'bg-moss', fg: 'text-forest' },
