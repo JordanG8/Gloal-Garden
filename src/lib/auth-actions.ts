@@ -117,6 +117,11 @@ export async function signupAction(
   }
 }
 
+export async function googleSignInAction(formData: FormData) {
+  const locale = localeOf(formData);
+  await signIn('auth0', { redirectTo: `/${locale}` });
+}
+
 export async function signOutAction(locale: string) {
   const target = isLocale(locale) ? locale : 'en';
   await signOut({ redirectTo: `/${target}/welcome` });

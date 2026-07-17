@@ -61,6 +61,8 @@ export const he: Dictionary = {
     alreadyHave: 'כבר יש לך חשבון?',
     signInInstead: 'כניסה',
     resetSuccess: 'הסיסמה עודכנה — אפשר להיכנס עם החדשה.',
+    continueWithGoogle: 'המשך עם Google',
+    orDivider: 'או',
 
     forgotTitle1: 'שכחת',
     forgotTitle2: 'סיסמה',

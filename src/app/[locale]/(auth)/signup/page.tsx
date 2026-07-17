@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getDict, isLocale, type Locale } from '@/i18n';
 import { AuthHeader } from '@/components/auth/auth-header';
 import { SignupForm } from '@/components/auth/auth-forms';
+import { googleSignInEnabled } from '@/auth';
 
 export default async function SignupPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale: raw } = await params;
@@ -19,7 +20,7 @@ export default async function SignupPage({ params }: { params: Promise<{ locale:
         backHref={`/${locale}/welcome`}
       />
       <div className="mt-8 animate-rise [animation-delay:0.08s]">
-        <SignupForm />
+        <SignupForm googleEnabled={googleSignInEnabled} />
       </div>
       <p className="mt-auto pt-8 text-center text-[14px] text-muted-foreground">
         {dict.auth.alreadyHave}{' '}

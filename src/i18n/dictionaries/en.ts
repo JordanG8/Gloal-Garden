@@ -59,6 +59,8 @@ export const en = {
     alreadyHave: 'Already have an account?',
     signInInstead: 'Sign in',
     resetSuccess: 'Password updated — sign in with the new one.',
+    continueWithGoogle: 'Continue with Google',
+    orDivider: 'or',
 
     forgotTitle1: 'FORGOT',
     forgotTitle2: 'PASSWORD',

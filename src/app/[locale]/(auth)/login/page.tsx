@@ -3,10 +3,11 @@ import Link from 'next/link';
 import { getDict, isLocale, type Locale } from '@/i18n';
 import { AuthHeader } from '@/components/auth/auth-header';
 import { LoginForm } from '@/components/auth/auth-forms';
+import { googleSignInEnabled } from '@/auth';
 
 async function FormWithNotes({ searchParams }: { searchParams: Promise<{ reset?: string; verified?: string }> }) {
   const { reset, verified } = await searchParams;
-  return <LoginForm reset={reset === '1'} verified={verified === '1'} />;
+  return <LoginForm reset={reset === '1'} verified={verified === '1'} googleEnabled={googleSignInEnabled} />;
 }
 
 export default async function LoginPage({
@@ -30,7 +31,7 @@ export default async function LoginPage({
         backHref={`/${locale}/welcome`}
       />
       <div className="mt-8 animate-rise [animation-delay:0.08s]">
-        <Suspense fallback={<LoginForm />}>
+        <Suspense fallback={<LoginForm googleEnabled={googleSignInEnabled} />}>
           <FormWithNotes searchParams={searchParams} />
         </Suspense>
       </div>
