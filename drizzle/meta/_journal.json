@@ -29,6 +29,13 @@
       "when": 1784278321868,
       "tag": "0003_species_hebrew_names",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1784316301880,
+      "tag": "0004_add_custom_species_name",
+      "breakpoints": true
     }
   ]
 }

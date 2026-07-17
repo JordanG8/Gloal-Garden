@@ -290,6 +290,36 @@ export function IconGoogle(props: IconProps) {
   );
 }
 
+export function IconImage(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="8.5" cy="9.5" r="1.7" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M4 17L9 12L13 16L16.5 12.5L20 16" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+export function IconFlipCamera(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path
+        d="M4 8H8L9.5 5.5H14.5L16 8H20V19H4V8Z"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9 13.5C9 11.8 10.3 10.5 12 10.5C13 10.5 13.9 11 14.4 11.8M15 13.5C15 15.2 13.7 16.5 12 16.5C11 16.5 10.1 16 9.6 15.2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <path d="M14.4 10.3V11.8H12.9M9.6 16.7V15.2H11.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function IconGlobe(props: IconProps) {
   return (
     <svg {...base(props)}>

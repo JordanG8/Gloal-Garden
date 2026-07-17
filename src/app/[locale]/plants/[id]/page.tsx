@@ -13,7 +13,7 @@ import { PlantImage } from '@/components/plant-art';
 import { ViewT } from '@/components/vt';
 import { AdoptButton } from '@/components/plant/adopt-button';
 import { BackButton } from '@/components/plant/back-button';
-import { pinStatus } from '@/components/map/plant-marker';
+import { pinStatus } from '@/lib/plant-status';
 import { IconPin, IconCamera, IconDropFilled, IconBasketFilled, IconAlert, IconCheck, IconForward } from '@/components/icons';
 import type { ObservationEntry } from '@/lib/types';
 
@@ -50,7 +50,13 @@ function FeedLine({ entry, dict, locale }: { entry: ObservationEntry; dict: Dict
       </div>
       {entry.photoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={entry.photoUrl} alt="" className="h-11 w-11 shrink-0 rounded-[10px] object-cover" />
+        <img
+          src={entry.photoUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-11 w-11 shrink-0 rounded-[10px] object-cover"
+        />
       ) : (
         <KarmaChip points={entry.points} />
       )}
@@ -95,8 +101,14 @@ async function PlantContent({ id, locale }: { id: number; locale: Locale }) {
           </div>
           <h1 className="font-display text-[40px] font-bold uppercase leading-[0.98] text-cream">{plant.name}</h1>
           <p className="text-[13px] text-cream/80">
-            {speciesDisplayName(plant, locale)} · <em>{plant.scientificName}</em> ·{' '}
-            {fill(dict.sheet.plantedBy, { name: plant.plantedByName })}
+            {speciesDisplayName(plant, locale)}
+            {!plant.customSpeciesName && (
+              <>
+                {' '}
+                · <em>{plant.scientificName}</em>
+              </>
+            )}{' '}
+            · {fill(dict.sheet.plantedBy, { name: plant.plantedByName })}
           </p>
         </div>
       </div>

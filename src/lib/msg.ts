@@ -8,8 +8,9 @@ export function actionMsg(code: string | undefined | null, dict: Dictionary): st
 }
 
 export function speciesDisplayName(
-  s: { speciesName: string; speciesNameHe: string | null },
+  s: { speciesName: string; speciesNameHe: string | null; customSpeciesName?: string | null },
   locale: Locale
 ): string {
+  if (s.customSpeciesName) return s.customSpeciesName;
   return locale === 'he' && s.speciesNameHe ? s.speciesNameHe : s.speciesName;
 }

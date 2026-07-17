@@ -10,6 +10,8 @@ export interface PlantSummary {
   speciesNameHe: string | null;
   emoji: string;
   scientificName: string;
+  /** Set when the planter chose "Other" and typed their own plant name. */
+  customSpeciesName: string | null;
   status: PlantStatus;
   isNew: boolean;
   plantedAt: string;

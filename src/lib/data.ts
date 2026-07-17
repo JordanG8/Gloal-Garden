@@ -25,7 +25,7 @@ function toPlantSummary(
 ): PlantSummary {
   return {
     id: plant.id,
-    name: plant.nickname || sp.commonName,
+    name: plant.nickname || plant.customSpeciesName || sp.commonName,
     lat: plant.lat,
     lng: plant.lng,
     category: sp.category,
@@ -33,6 +33,7 @@ function toPlantSummary(
     speciesNameHe: sp.commonNameHe,
     emoji: sp.emoji,
     scientificName: sp.scientificName,
+    customSpeciesName: plant.customSpeciesName,
     status: computeStatus(plant, sp),
     isNew:
       Date.now() - new Date(plant.plantedAt).getTime() <

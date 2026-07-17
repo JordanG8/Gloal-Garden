@@ -3,8 +3,10 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useI18n } from '@/i18n/provider';
-import { IconCamera, IconClose } from './icons';
+import { IconCamera, IconClose, IconImage } from './icons';
+import { CameraCapture } from '@/components/camera-capture';
 
 const MAX_DIMENSION = 1600;
 const JPEG_QUALITY = 0.82;
@@ -14,7 +16,7 @@ const JPEG_QUALITY = 0.82;
  * few hundred KB before they ever hit the network. Also normalizes EXIF
  * rotation via createImageBitmap, so photos from any OS come out upright.
  */
-async function compressImage(file: File): Promise<Blob> {
+async function compressImage(file: Blob): Promise<Blob> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
@@ -66,6 +68,8 @@ export default function PhotoInput({
   const [preview, setPreview] = useState(initialUrl);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   function setPhoto(nextUrl: string, nextPreview: string) {
     setUrl(nextUrl);
@@ -76,18 +80,13 @@ export default function PhotoInput({
     onChange?.(nextUrl);
   }
 
-  async function handleFile(file: File | undefined | null) {
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setError(dict.common.notAnImage);
-      return;
-    }
+  async function upload(blob: Blob) {
     setError('');
     setUploading(true);
-    setPhoto('', URL.createObjectURL(file));
+    setPhoto('', URL.createObjectURL(blob));
 
     try {
-      const compressed = await compressImage(file);
+      const compressed = await compressImage(blob);
       const body = new FormData();
       body.append('file', compressed, 'photo.jpg');
       const res = await fetch('/api/uploads', { method: 'POST', body });
@@ -103,6 +102,15 @@ export default function PhotoInput({
     } finally {
       setUploading(false);
     }
+  }
+
+  function handleFile(file: File | undefined | null) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError(dict.common.notAnImage);
+      return;
+    }
+    upload(file);
   }
 
   const radiusCls = round ? 'rounded-full' : 'rounded-2xl';
@@ -147,7 +155,7 @@ export default function PhotoInput({
       ) : (
         <button
           type="button"
-          onClick={() => inputRef.current?.click()}
+          onClick={() => setSheetOpen(true)}
           className={`relative flex w-full flex-col items-center justify-center gap-2 border-[1.5px] border-dashed border-[#C9BFA8] bg-cream text-muted-foreground transition hover:border-forest hover:text-forest active:scale-[0.99] ${radiusCls}`}
           style={round ? { width: height, height } : { height }}
         >
@@ -157,6 +165,55 @@ export default function PhotoInput({
       )}
 
       {error && <p className="mt-2 text-[12.5px] font-medium text-destructive">{error}</p>}
+
+      {sheetOpen &&
+        createPortal(
+          <>
+            <button
+              aria-label={dict.common.close}
+              className="animate-fade fixed inset-0 z-40 bg-ink/25"
+              onClick={() => setSheetOpen(false)}
+            />
+            <div className="animate-sheet-up fixed inset-x-0 bottom-0 z-50 mx-auto flex w-full max-w-[520px] flex-col gap-1.5 rounded-t-[28px] bg-cream px-5 pb-[max(env(safe-area-inset-bottom),20px)] pt-3 shadow-[0_-12px_40px_rgba(32,37,28,0.25)]">
+              <div className="flex justify-center pb-2">
+                <div className="h-[5px] w-10 rounded-full bg-[#D8D2C2]" />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSheetOpen(false);
+                  setCameraOpen(true);
+                }}
+                className="flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3.5 text-start transition hover:bg-chip"
+              >
+                <IconCamera size={20} className="text-forest" />
+                <span className="text-[14.5px] font-semibold text-ink">{dict.common.takePhoto}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSheetOpen(false);
+                  inputRef.current?.click();
+                }}
+                className="flex items-center gap-3 rounded-2xl border border-line bg-card px-4 py-3.5 text-start transition hover:bg-chip"
+              >
+                <IconImage size={20} className="text-forest" />
+                <span className="text-[14.5px] font-semibold text-ink">{dict.common.fromGallery}</span>
+              </button>
+            </div>
+          </>,
+          document.body
+        )}
+
+      {cameraOpen && (
+        <CameraCapture
+          onClose={() => setCameraOpen(false)}
+          onCapture={(blob) => {
+            setCameraOpen(false);
+            upload(blob);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -125,8 +125,14 @@ export function PlantSheet({
                 </h2>
               </Link>
               <p className="mt-1 text-[13px] text-muted-foreground">
-                {speciesDisplayName(plant, locale)} · <em>{plant.scientificName}</em> ·{' '}
-                {fill(dict.sheet.plantedBy, { name: plant.plantedByName })}
+                {speciesDisplayName(plant, locale)}
+                {!plant.customSpeciesName && (
+                  <>
+                    {' '}
+                    · <em>{plant.scientificName}</em>
+                  </>
+                )}{' '}
+                · {fill(dict.sheet.plantedBy, { name: plant.plantedByName })}
               </p>
             </div>
             <StatusPill status={pinStatus(plant) as never} dict={dict} className="mt-1 shrink-0" />
@@ -196,7 +202,13 @@ export function PlantSheet({
                         }`}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={photo.photoUrl!} alt="" className="h-full w-full object-cover" />
+                        <img
+                          src={photo.photoUrl!}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="h-full w-full object-cover"
+                        />
                       </div>
                       <span className={`text-[9.5px] font-semibold ${i === arr.length - 1 ? 'text-gold-deep' : 'text-faint'}`}>
                         {shortDate(photo.createdAt, locale)}

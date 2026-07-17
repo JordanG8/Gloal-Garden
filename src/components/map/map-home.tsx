@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Map, { Marker, type MapRef } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
@@ -11,7 +11,21 @@ import { Avatar } from '@/components/avatar';
 import { STATUS_COLOR, statusLabel } from '@/components/pills';
 import { IconSearch, IconLocate, IconClose, IconMail } from '@/components/icons';
 import { PlantPin, pinStatus } from './plant-marker';
+import { UserLocationMarker } from './user-location-marker';
 import { PlantSheet } from './plant-sheet';
+
+/** iOS 13+ gates device orientation behind an explicit, gesture-triggered prompt. */
+type DeviceOrientationEventConstructorWithPermission = typeof DeviceOrientationEvent & {
+  requestPermission?: () => Promise<'granted' | 'denied'>;
+};
+
+/** Compass heading in degrees clockwise from true north, from whichever orientation event the browser fires. */
+function headingFromOrientationEvent(e: DeviceOrientationEvent): number | null {
+  const withCompass = e as DeviceOrientationEvent & { webkitCompassHeading?: number };
+  if (typeof withCompass.webkitCompassHeading === 'number') return withCompass.webkitCompassHeading;
+  if (e.alpha !== null && e.alpha !== undefined) return (360 - e.alpha) % 360;
+  return null;
+}
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 const FALLBACK_CENTER = { lat: 32.5185, lng: 35.0047 }; // Givat Ada
@@ -51,6 +65,80 @@ export function MapHome({
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [heading, setHeading] = useState<number | null>(null);
+  const [tracking, setTracking] = useState(false);
+  const [locateError, setLocateError] = useState('');
+  const watchIdRef = useRef<number | null>(null);
+  const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+
+  function stopTracking() {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation?.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    if (orientationHandlerRef.current) {
+      window.removeEventListener('deviceorientationabsolute', orientationHandlerRef.current as EventListener);
+      window.removeEventListener('deviceorientation', orientationHandlerRef.current as EventListener);
+      orientationHandlerRef.current = null;
+    }
+    setTracking(false);
+    setHeading(null);
+  }
+
+  useEffect(() => stopTracking, []);
+
+  async function startTracking() {
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      const next = headingFromOrientationEvent(e);
+      if (next !== null) setHeading(next);
+    };
+    orientationHandlerRef.current = handleOrientation;
+    window.addEventListener('deviceorientationabsolute', handleOrientation as EventListener);
+    window.addEventListener('deviceorientation', handleOrientation as EventListener);
+
+    // Must run from this click's gesture, not after an awaited geolocation call.
+    const DOE = (window as unknown as { DeviceOrientationEvent?: DeviceOrientationEventConstructorWithPermission })
+      .DeviceOrientationEvent;
+    if (typeof DOE?.requestPermission === 'function') {
+      try {
+        await DOE.requestPermission();
+      } catch {
+        // Compass stays unavailable; live position tracking still works.
+      }
+    }
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => setMyLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {
+        setLocateError(dict.map.locationError);
+        stopTracking();
+      },
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 10000 }
+    );
+    setTracking(true);
+  }
+
+  function locateMe() {
+    if (tracking) {
+      stopTracking();
+      return;
+    }
+    if (!navigator.geolocation) {
+      setLocateError(dict.map.locationError);
+      return;
+    }
+    setLocateError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setMyLocation(loc);
+        mapRef.current?.flyTo({ center: [loc.lng, loc.lat], zoom: 16, duration: 1200 });
+      },
+      () => setLocateError(dict.map.locationError),
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+    startTracking();
+  }
 
   const center = useMemo(() => {
     if (plants.length === 0) return FALLBACK_CENTER;
@@ -94,18 +182,6 @@ export function MapHome({
     { key: 'trouble', label: dict.map.trouble, dot: STATUS_COLOR.needs_attention },
   ];
 
-  function locateMe() {
-    navigator.geolocation?.getCurrentPosition(
-      (pos) => {
-        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setMyLocation(loc);
-        mapRef.current?.flyTo({ center: [loc.lng, loc.lat], zoom: 16, duration: 1200 });
-      },
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000 }
-    );
-  }
-
   return (
     <div className="absolute inset-0 overflow-hidden">
       <Map
@@ -118,10 +194,7 @@ export function MapHome({
       >
         {myLocation && (
           <Marker latitude={myLocation.lat} longitude={myLocation.lng}>
-            <span className="relative flex h-4 w-4">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-water opacity-60" />
-              <span className="relative inline-flex h-4 w-4 rounded-full border-2 border-white bg-water" />
-            </span>
+            <UserLocationMarker heading={heading} />
           </Marker>
         )}
         {visible.map((plant) => (
@@ -252,15 +325,27 @@ export function MapHome({
         </div>
       )}
 
-      {/* Locate me */}
+      {/* Locate me / live tracking toggle — tap starts a Pokemon-Go-style
+          "you are here" marker with a facing cone; tap again stops it. */}
       <button
         type="button"
         onClick={locateMe}
-        aria-label={dict.map.locateMe}
-        className="absolute bottom-[132px] end-4 z-10 flex h-[50px] w-[50px] items-center justify-center rounded-full bg-white text-forest shadow-[0_6px_18px_rgba(32,37,28,0.18)] transition active:scale-95"
+        aria-label={tracking ? dict.map.liveLocationOn : dict.map.locateMe}
+        aria-pressed={tracking}
+        className={`absolute bottom-[132px] end-4 z-10 flex h-[50px] w-[50px] items-center justify-center rounded-full shadow-[0_6px_18px_rgba(32,37,28,0.18)] transition active:scale-95 ${
+          tracking ? 'bg-water text-white' : 'bg-white text-forest'
+        }`}
       >
         <IconLocate size={21} className="rtl:-scale-x-100" />
       </button>
+
+      {locateError && (
+        <div className="pointer-events-none absolute inset-x-6 bottom-[196px] z-10 flex justify-center">
+          <p className="animate-pop pointer-events-auto rounded-full bg-ink/85 px-4 py-2.5 text-[12.5px] font-medium text-cream backdrop-blur-sm">
+            {locateError}
+          </p>
+        </div>
+      )}
 
       {selected && (
         <PlantSheet
