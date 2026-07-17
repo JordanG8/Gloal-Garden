@@ -105,8 +105,8 @@ export async function adoptPlant(plantId: number): Promise<ActionResult> {
       await runBatch([...statements]);
     }
 
-    revalidatePath('/');
-    revalidatePath(`/plants/${plantId}`);
+    revalidatePath('/[locale]', 'layout');
+    revalidatePath('/[locale]/plants/[id]', 'page');
     return { ok: true, pointsAwarded: points };
   } catch (error) {
     console.error('adoptPlant failed:', error);
@@ -128,7 +128,7 @@ export async function abandonPlant(plantId: number): Promise<ActionResult> {
     return { ok: false, error: 'Could not update your stewardship. Please try again.' };
   }
 
-  revalidatePath('/');
-  revalidatePath(`/plants/${plantId}`);
+  revalidatePath('/[locale]', 'layout');
+  revalidatePath('/[locale]/plants/[id]', 'page');
   return { ok: true };
 }

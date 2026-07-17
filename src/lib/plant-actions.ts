@@ -419,7 +419,7 @@ export async function createPlant(input: {
     return { ok: false, error: 'Could not save the plant. Please try again.' };
   }
 
-  revalidatePath('/');
+  revalidatePath('/[locale]', 'layout');
   return {
     ok: true,
     pointsAwarded,
@@ -646,9 +646,9 @@ export async function logCareAction(input: {
     if (award.rescueBonus > 0) kindsLogged.push('rescue_bonus');
     newBadges = await awardBadges(userId, kindsLogged);
 
-    revalidatePath('/');
-    revalidatePath(`/plants/${input.plantId}`);
-    revalidatePath('/leaderboard');
+    revalidatePath('/[locale]', 'layout');
+    revalidatePath('/[locale]/plants/[id]', 'page');
+    revalidatePath('/[locale]/(tabs)/ranks', 'page');
     return {
       ok: true,
       pointsAwarded: award.points + award.rescueBonus,
@@ -723,7 +723,7 @@ export async function updatePlantDetails(input: {
     return { ok: false, error: 'Could not save the changes. Please try again.' };
   }
 
-  revalidatePath('/');
-  revalidatePath(`/plants/${input.plantId}`);
+  revalidatePath('/[locale]', 'layout');
+  revalidatePath('/[locale]/plants/[id]', 'page');
   return { ok: true };
 }
