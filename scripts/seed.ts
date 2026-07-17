@@ -1,25 +1,19 @@
-import * as dotenv from 'dotenv';
-dotenv.config();
+import 'dotenv/config';
 
 import { db } from '../src/db';
 import { species, plants, users, observations, adoptions, karmaEvents } from '../src/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
-import {
-  computeAward,
-  evaluateBadges,
-  plantEstablishedEligible,
-  plantNewPoints,
-  reportConfirmedPoints,
-  POINTS,
-  type BadgeMetric,
-  type CareActionType,
-  type KarmaKind,
-} from '../src/lib/karma';
-import { computeStatus } from '../src/lib/plant-status';
+import { evaluateBadges, type BadgeMetric } from '../src/lib/karma';
 
 const DAY = 24 * 60 * 60 * 1000;
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY);
+
+/** Branded SVG "photo" placeholders so the demo garden looks alive. */
+function demoPhoto(emoji: string, from: string, to: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/></linearGradient></defs><rect width="640" height="640" fill="url(#g)"/><path d="M-40 700 C120 520 140 360 80 160 C320 260 380 480 280 700 Z" fill="#17402B" opacity="0.12"/><path d="M700 720 C520 560 500 380 580 140 C340 280 300 520 460 720 Z" fill="#3B8455" opacity="0.10"/><text x="320" y="380" font-size="200" text-anchor="middle">${emoji}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
 
 async function main() {
   if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
@@ -33,312 +27,411 @@ async function main() {
   const insertedUsers = await db
     .insert(users)
     .values([
-      { email: 'demo@globalgarden.app', passwordHash, displayName: 'Demo Gardener', createdAt: daysAgo(200) },
-      { email: 'alex@globalgarden.app', passwordHash, displayName: 'Alex T.', createdAt: daysAgo(180) },
-      { email: 'sam@globalgarden.app', passwordHash, displayName: 'Sam R.', createdAt: daysAgo(150) },
+      {
+        email: 'demo@globalgarden.app',
+        passwordHash,
+        displayName: 'Dana Demo',
+        bio: 'Just here to water things and pet street cats.',
+        location: 'Givat Ada',
+        emailVerifiedAt: daysAgo(200),
+        createdAt: daysAgo(200),
+      },
+      {
+        email: 'noa@globalgarden.app',
+        passwordHash,
+        displayName: 'Noa Barak',
+        bio: 'Planted the first fig. The playground is my greenhouse.',
+        location: 'Givat Ada',
+        emailVerifiedAt: daysAgo(320),
+        createdAt: daysAgo(320),
+      },
+      {
+        email: 'amit@globalgarden.app',
+        passwordHash,
+        displayName: 'Amit Shani',
+        bio: 'אני משקה הכול, גם מה שלא שלי 🌊',
+        location: 'גבעת עדה',
+        emailVerifiedAt: daysAgo(300),
+        createdAt: daysAgo(300),
+      },
+      {
+        email: 'tamar@globalgarden.app',
+        passwordHash,
+        displayName: 'Tamar Golan',
+        bio: 'זקנת הגינה. אם זה מניב — קטפתי את זה.',
+        location: 'גבעת עדה',
+        emailVerifiedAt: daysAgo(400),
+        createdAt: daysAgo(400),
+      },
+      {
+        email: 'yotam@globalgarden.app',
+        passwordHash,
+        displayName: 'Yotam Peretz',
+        bio: 'Compost evangelist. Ask me about worms.',
+        location: 'Givat Ada',
+        emailVerifiedAt: daysAgo(380),
+        createdAt: daysAgo(380),
+      },
+      {
+        email: 'ori@globalgarden.app',
+        passwordHash,
+        displayName: 'Ori Levi',
+        bio: null,
+        location: 'Givat Ada',
+        emailVerifiedAt: daysAgo(60),
+        createdAt: daysAgo(60),
+      },
     ])
     .returning();
-  const [demo, alex, sam] = insertedUsers;
+  const [dana, noa, amit, tamar, yotam, ori] = insertedUsers;
 
   const insertedSpecies = await db
     .insert(species)
     .values([
-      { commonName: 'Cherry Tomato', scientificName: 'Solanum lycopersicum', category: 'vegetable', emoji: '🍅', daysToHarvest: 60, wateringFrequencyDays: 2, sunRequirements: 'Full sun' },
-      { commonName: 'Lemon Tree', scientificName: 'Citrus limon', category: 'fruit', emoji: '🍋', daysToHarvest: 365, wateringFrequencyDays: 7, sunRequirements: 'Full sun' },
-      { commonName: 'Sweet Basil', scientificName: 'Ocimum basilicum', category: 'herb', emoji: '🌿', daysToHarvest: 30, wateringFrequencyDays: 3, sunRequirements: 'Full to partial sun' },
-      { commonName: 'Carrot', scientificName: 'Daucus carota', category: 'vegetable', emoji: '🥕', daysToHarvest: 75, wateringFrequencyDays: 3, sunRequirements: 'Full sun' },
-      { commonName: 'Apple Tree', scientificName: 'Malus domestica', category: 'tree', emoji: '🍎', daysToHarvest: 730, wateringFrequencyDays: 10, sunRequirements: 'Full sun' },
-      { commonName: 'Jalapeño', scientificName: 'Capsicum annuum', category: 'vegetable', emoji: '🌶️', daysToHarvest: 75, wateringFrequencyDays: 2, sunRequirements: 'Full sun' },
-      { commonName: 'Strawberry', scientificName: 'Fragaria × ananassa', category: 'fruit', emoji: '🍓', daysToHarvest: 90, wateringFrequencyDays: 2, sunRequirements: 'Full sun' },
-      { commonName: 'Rosemary', scientificName: 'Salvia rosmarinus', category: 'herb', emoji: '🪴', daysToHarvest: 80, wateringFrequencyDays: 14, sunRequirements: 'Full sun, drought tolerant' },
-      { commonName: 'Zucchini', scientificName: 'Cucurbita pepo', category: 'vegetable', emoji: '🥒', daysToHarvest: 50, wateringFrequencyDays: 2, sunRequirements: 'Full sun' },
-      { commonName: 'Mint', scientificName: 'Mentha spicata', category: 'herb', emoji: '🌱', daysToHarvest: 40, wateringFrequencyDays: 3, sunRequirements: 'Partial shade ok' },
+      { commonName: 'Common Fig', commonNameHe: 'תאנה', scientificName: 'Ficus carica', category: 'tree', emoji: '🌳', daysToHarvest: 240, wateringFrequencyDays: 7, sunRequirements: 'Full sun' },
+      { commonName: 'Cherry Tomato', commonNameHe: 'עגבניית שרי', scientificName: 'Solanum lycopersicum', category: 'vegetable', emoji: '🍅', daysToHarvest: 60, wateringFrequencyDays: 2, sunRequirements: 'Full sun' },
+      { commonName: 'Lemon Tree', commonNameHe: 'עץ לימון', scientificName: 'Citrus limon', category: 'fruit', emoji: '🍋', daysToHarvest: 365, wateringFrequencyDays: 7, sunRequirements: 'Full sun' },
+      { commonName: 'Sweet Basil', commonNameHe: 'בזיליקום', scientificName: 'Ocimum basilicum', category: 'herb', emoji: '🌿', daysToHarvest: 30, wateringFrequencyDays: 3, sunRequirements: 'Full to partial sun' },
+      { commonName: 'Carrot', commonNameHe: 'גזר', scientificName: 'Daucus carota', category: 'vegetable', emoji: '🥕', daysToHarvest: 75, wateringFrequencyDays: 3, sunRequirements: 'Full sun' },
+      { commonName: 'Apple Tree', commonNameHe: 'עץ תפוח', scientificName: 'Malus domestica', category: 'tree', emoji: '🍎', daysToHarvest: 730, wateringFrequencyDays: 10, sunRequirements: 'Full sun' },
+      { commonName: 'Jalapeño', commonNameHe: 'פלפל חריף', scientificName: 'Capsicum annuum', category: 'vegetable', emoji: '🌶️', daysToHarvest: 75, wateringFrequencyDays: 2, sunRequirements: 'Full sun' },
+      { commonName: 'Strawberry', commonNameHe: 'תות שדה', scientificName: 'Fragaria × ananassa', category: 'fruit', emoji: '🍓', daysToHarvest: 90, wateringFrequencyDays: 2, sunRequirements: 'Full sun' },
+      { commonName: 'Rosemary', commonNameHe: 'רוזמרין', scientificName: 'Salvia rosmarinus', category: 'herb', emoji: '🪴', daysToHarvest: 80, wateringFrequencyDays: 14, sunRequirements: 'Drought tolerant' },
+      { commonName: 'Zucchini', commonNameHe: 'קישוא', scientificName: 'Cucurbita pepo', category: 'vegetable', emoji: '🥒', daysToHarvest: 50, wateringFrequencyDays: 2, sunRequirements: 'Full sun' },
+      { commonName: 'Mint', commonNameHe: 'נענע', scientificName: 'Mentha spicata', category: 'herb', emoji: '🌱', daysToHarvest: 40, wateringFrequencyDays: 3, sunRequirements: 'Partial shade ok' },
     ])
     .returning();
-
   const sp = Object.fromEntries(insertedSpecies.map((s) => [s.commonName, s]));
 
-  // Givat Ada cluster around עדה"ס (HaZayit 33) with a mix of statuses.
+  // Givat Ada cluster with a spread of statuses matching the design screens.
   const insertedPlants = await db
     .insert(plants)
     .values([
-      // 0: Healthy, recently watered
-      { speciesId: sp['Sweet Basil'].id, nickname: 'Library Steps Basil', lat: 32.51920, lng: 35.00310, plantedBy: demo.id, plantedAt: daysAgo(12), lastWateredAt: daysAgo(1), accessNotes: 'Planter box by the south entrance' },
-      // 1: Needs water (watered 5 days ago, frequency 2)
-      { speciesId: sp['Cherry Tomato'].id, nickname: 'Alley Tomatoes', lat: 32.51760, lng: 35.00580, plantedBy: alex.id, plantedAt: daysAgo(35), lastWateredAt: daysAgo(5), description: 'Volunteer plant doing surprisingly well.', accessNotes: 'Behind the mural, next to the drain pipe' },
-      // 2: Ready to harvest (~60 days old)
-      { speciesId: sp['Cherry Tomato'].id, nickname: 'Plaza Cherry Toms', lat: 32.51840, lng: 35.00475, plantedBy: demo.id, plantedAt: daysAgo(58), lastWateredAt: daysAgo(1), description: 'Planted for the community fridge.' },
-      // 3: Reported issue
-      { speciesId: sp['Strawberry'].id, nickname: 'Parklet Strawberries', lat: 32.51690, lng: 35.00390, plantedBy: sam.id, plantedAt: daysAgo(40), lastWateredAt: daysAgo(2), status: 'diseased', accessNotes: 'Raised bed in the 4th St parklet' },
-      // 4: Mature tree
-      { speciesId: sp['Lemon Tree'].id, nickname: 'Courthouse Lemon', lat: 32.52010, lng: 35.00520, plantedBy: alex.id, plantedAt: daysAgo(400), lastWateredAt: daysAgo(3), description: 'Anyone can pick — please leave some for others.' },
-      // 5: Fresh planting
-      { speciesId: sp['Mint'].id, nickname: 'Bus Stop Mint', lat: 32.51730, lng: 35.00700, plantedBy: sam.id, plantedAt: daysAgo(3), lastWateredAt: daysAgo(0), accessNotes: 'Sidewalk strip, NE corner' },
-      // 6
-      { speciesId: sp['Jalapeño'].id, nickname: 'Spice Corner', lat: 32.51960, lng: 35.00150, plantedBy: demo.id, plantedAt: daysAgo(20), lastWateredAt: daysAgo(1) },
-      // 7: Neglected past its activity window (14d freq → 28d window) → up for adoption
-      { speciesId: sp['Rosemary'].id, nickname: 'Stairway Rosemary', lat: 32.51600, lng: 35.00250, plantedBy: alex.id, plantedAt: daysAgo(120), lastWateredAt: daysAgo(35), description: 'Hardy bush, take cuttings freely.' },
-      // 8
-      { speciesId: sp['Zucchini'].id, nickname: 'Vacant Lot Zukes', lat: 32.52080, lng: 35.00330, plantedBy: sam.id, plantedAt: daysAgo(48), lastWateredAt: daysAgo(1) },
-      // 9: Never photographed → demoably "unverified"
-      { speciesId: sp['Carrot'].id, nickname: 'Median Carrots', lat: 32.51870, lng: 35.00050, plantedBy: demo.id, plantedAt: daysAgo(70), lastWateredAt: daysAgo(4) },
+      { speciesId: sp['Common Fig'].id, nickname: 'Fig by the playground', lat: 32.5184, lng: 35.00475, plantedBy: noa.id, plantedAt: daysAgo(142), lastWateredAt: daysAgo(6), description: 'Behind the bench, public land.', accessNotes: 'Hose at the kiosk — ask Eli for the key.' },
+      { speciesId: sp['Lemon Tree'].id, nickname: 'Lemon by the kiosk', lat: 32.5192, lng: 35.0031, plantedBy: tamar.id, plantedAt: daysAgo(370), lastWateredAt: daysAgo(2), description: 'Anyone can pick — leave some for others.' },
+      { speciesId: sp['Cherry Tomato'].id, nickname: 'עגבניות ליד תיבות הדואר', lat: 32.5176, lng: 35.0058, plantedBy: amit.id, plantedAt: daysAgo(35), lastWateredAt: daysAgo(5), accessNotes: 'רצועת גינון ציבורית, ברז בבניין 4' },
+      { speciesId: sp['Strawberry'].id, nickname: 'Parklet strawberries', lat: 32.5169, lng: 35.0039, plantedBy: dana.id, plantedAt: daysAgo(40), lastWateredAt: daysAgo(2), status: 'diseased', accessNotes: 'Raised bed in the parklet' },
+      { speciesId: sp['Sweet Basil'].id, nickname: 'בזיליקום של הספרייה', lat: 32.5201, lng: 35.0052, plantedBy: tamar.id, plantedAt: daysAgo(12), lastWateredAt: daysAgo(1), accessNotes: 'אדנית בכניסה הדרומית' },
+      { speciesId: sp['Mint'].id, nickname: 'Bus stop mint', lat: 32.5173, lng: 35.007, plantedBy: ori.id, plantedAt: daysAgo(3), lastWateredAt: daysAgo(0), accessNotes: 'Sidewalk strip, NE corner' },
+      { speciesId: sp['Jalapeño'].id, nickname: 'Spice corner', lat: 32.5196, lng: 35.0015, plantedBy: dana.id, plantedAt: daysAgo(20), lastWateredAt: daysAgo(1) },
+      { speciesId: sp['Rosemary'].id, nickname: 'Stairway rosemary', lat: 32.516, lng: 35.0025, plantedBy: yotam.id, plantedAt: daysAgo(120), lastWateredAt: daysAgo(35), description: 'Hardy bush, take cuttings freely.' },
+      { speciesId: sp['Zucchini'].id, nickname: 'קישואים של תמר', lat: 32.5208, lng: 35.0033, plantedBy: tamar.id, plantedAt: daysAgo(52), lastWateredAt: daysAgo(1) },
+      { speciesId: sp['Apple Tree'].id, nickname: 'Schoolyard apple', lat: 32.5187, lng: 35.0005, plantedBy: yotam.id, plantedAt: daysAgo(200), lastWateredAt: daysAgo(4) },
+      { speciesId: sp['Carrot'].id, nickname: 'Community fridge carrots', lat: 32.5165, lng: 35.0062, plantedBy: amit.id, plantedAt: daysAgo(45), lastWateredAt: daysAgo(8) },
     ])
     .returning();
 
-  const photo = (seedName: string) => `https://picsum.photos/seed/${seedName}/800/600`;
+  const [fig, lemon, tomatoes, strawberries, basil, , , , zucchini, apple] = insertedPlants;
 
-  // Chronological care history. Types here are the ACTION types; 'report'
-  // becomes an 'alert' observation like the app does.
-  const careLog: {
-    plantIdx: number;
+  await db.insert(adoptions).values([
+    { userId: amit.id, plantId: fig.id, createdAt: daysAgo(100) },
+    { userId: dana.id, plantId: fig.id, createdAt: daysAgo(30) },
+    { userId: noa.id, plantId: lemon.id, createdAt: daysAgo(150) },
+    { userId: dana.id, plantId: tomatoes.id, createdAt: daysAgo(20) },
+    { userId: tamar.id, plantId: apple.id, createdAt: daysAgo(90) },
+  ]);
+
+  // ------------------------------------------------------------------
+  // History: observations + a karma ledger that adds up.
+  // ------------------------------------------------------------------
+  interface Obs {
+    plantId: number;
     userId: number;
-    type: CareActionType;
+    type: string;
+    daysAgo: number;
+    photo?: { emoji: string; from: string; to: string };
     caption?: string;
-    photoUrl?: string;
     harvestQuantity?: string;
-    diseaseTag?: string;
-    at: Date;
-  }[] = [
-    { plantIdx: 2, userId: demo.id, type: 'photo', caption: 'First blossoms are showing.', photoUrl: photo('plaza-toms'), at: daysAgo(20) },
-    { plantIdx: 8, userId: demo.id, type: 'report', caption: 'Leaves chewed up, maybe slugs?', at: daysAgo(6) },
-    { plantIdx: 1, userId: alex.id, type: 'water', caption: 'Looking a bit dry but perking up!', at: daysAgo(5) },
-    { plantIdx: 8, userId: alex.id, type: 'resolve', caption: 'Picked the slugs off, beer trap set. All good.', at: daysAgo(4) },
-    { plantIdx: 4, userId: alex.id, type: 'harvest', caption: 'Took 3 ripe ones, left plenty.', photoUrl: photo('lemons'), harvestQuantity: '3 lemons', at: daysAgo(4) },
-    { plantIdx: 2, userId: alex.id, type: 'water', at: daysAgo(3) },
-    { plantIdx: 5, userId: sam.id, type: 'photo', caption: 'Freshly planted, fingers crossed.', photoUrl: photo('mint'), at: daysAgo(3) },
-    { plantIdx: 3, userId: sam.id, type: 'report', caption: 'Aphids on the lower leaves, needs neem oil.', diseaseTag: 'pests', at: daysAgo(2) },
-    { plantIdx: 2, userId: sam.id, type: 'water', at: daysAgo(1) },
-  ];
+    kind?: string;
+    points?: number;
+    rescue?: number;
+  }
 
-  const insertedObservations = [] as { id: number }[];
-  for (const entry of careLog) {
+  const figPhoto = { emoji: '🌿', from: '#DFE9D1', to: '#F4EACB' };
+  const lemonPhoto = { emoji: '🍋', from: '#F4EACB', to: '#E7EFE2' };
+  const obsPlan: Obs[] = [];
+
+  // Fig: 142 days old, 38 waterings by three carers, photo timeline, harvest.
+  const figCarers = [noa.id, amit.id, dana.id];
+  for (let i = 0; i < 38; i++) {
+    const actor = figCarers[i % 3];
+    obsPlan.push({
+      plantId: fig.id,
+      userId: actor,
+      type: 'water',
+      daysAgo: Math.max(1, Math.round(140 - i * 3.5)),
+      kind: 'water_due',
+      points: actor === noa.id ? 10 : 15,
+    });
+  }
+  const figPhotoDays = [130, 96, 60, 24, 2];
+  figPhotoDays.forEach((day, i) => {
+    const actor = i % 2 === 0 ? noa.id : amit.id;
+    obsPlan.push({
+      plantId: fig.id,
+      userId: actor,
+      type: 'photo',
+      daysAgo: day,
+      photo: figPhoto,
+      caption: i === figPhotoDays.length - 1 ? 'New figs coming in!' : undefined,
+      kind: 'photo',
+      points: actor === noa.id ? 5 : 8,
+    });
+  });
+  obsPlan.push({
+    plantId: fig.id,
+    userId: tamar.id,
+    type: 'harvest',
+    daysAgo: 3,
+    photo: figPhoto,
+    caption: 'First real haul of the season',
+    harvestQuantity: '1.2 kg figs',
+    kind: 'harvest',
+    points: 38,
+  });
+
+  // Lemon: long history, harvest ready now.
+  for (let i = 0; i < 20; i++) {
+    const actor = i % 2 === 0 ? tamar.id : noa.id;
+    obsPlan.push({
+      plantId: lemon.id,
+      userId: actor,
+      type: 'water',
+      daysAgo: Math.max(2, 360 - i * 17),
+      kind: 'water_due',
+      points: actor === tamar.id ? 10 : 15,
+    });
+  }
+  [300, 180, 40].forEach((day) =>
+    obsPlan.push({ plantId: lemon.id, userId: tamar.id, type: 'photo', daysAgo: day, photo: lemonPhoto, kind: 'photo', points: 5 })
+  );
+  [200, 110, 30].forEach((day, i) => {
+    const actor = i === 1 ? yotam.id : tamar.id;
+    obsPlan.push({
+      plantId: lemon.id,
+      userId: actor,
+      type: 'harvest',
+      daysAgo: day,
+      photo: lemonPhoto,
+      harvestQuantity: `${2 + i} kg lemons`,
+      kind: 'harvest',
+      points: actor === yotam.id ? 38 : 25,
+    });
+  });
+
+  // Tomatoes (Hebrew nickname): waterings + photo.
+  for (let i = 0; i < 10; i++) {
+    const actor = i % 2 === 0 ? amit.id : dana.id;
+    obsPlan.push({
+      plantId: tomatoes.id,
+      userId: actor,
+      type: 'water',
+      daysAgo: Math.max(5, 33 - i * 3),
+      kind: 'water_due',
+      points: actor === amit.id ? 10 : 15,
+    });
+  }
+  obsPlan.push({
+    plantId: tomatoes.id,
+    userId: amit.id,
+    type: 'photo',
+    daysAgo: 15,
+    photo: { emoji: '🍅', from: '#F5E7DE', to: '#DFE9D1' },
+    caption: 'הצמח מטפס יפה על הרשת',
+    kind: 'photo',
+    points: 5,
+  });
+
+  // Strawberries: open report + waterings.
+  obsPlan.push({
+    plantId: strawberries.id,
+    userId: yotam.id,
+    type: 'alert',
+    daysAgo: 4,
+    caption: 'Leaf spots — looks fungal',
+    kind: 'report',
+    points: 0,
+  });
+  for (let i = 0; i < 6; i++) {
+    obsPlan.push({
+      plantId: strawberries.id,
+      userId: dana.id,
+      type: 'water',
+      daysAgo: Math.max(2, 36 - i * 6),
+      kind: 'water_due',
+      points: 10,
+    });
+  }
+
+  // Basil, zucchini, apple: light history.
+  obsPlan.push({
+    plantId: basil.id,
+    userId: tamar.id,
+    type: 'photo',
+    daysAgo: 8,
+    photo: { emoji: '🌿', from: '#E7EFE2', to: '#F2F5EC' },
+    kind: 'photo',
+    points: 5,
+  });
+  for (let i = 0; i < 8; i++) {
+    const actor = i % 2 === 0 ? tamar.id : yotam.id;
+    obsPlan.push({
+      plantId: zucchini.id,
+      userId: actor,
+      type: 'water',
+      daysAgo: Math.max(1, 50 - i * 6),
+      kind: 'water_due',
+      points: actor === tamar.id ? 10 : 15,
+    });
+  }
+  obsPlan.push({
+    plantId: zucchini.id,
+    userId: tamar.id,
+    type: 'photo',
+    daysAgo: 10,
+    photo: { emoji: '🥒', from: '#DFE9D1', to: '#E3EBD6' },
+    kind: 'photo',
+    points: 5,
+  });
+  const appleCarers = [yotam.id, tamar.id, ori.id];
+  for (let i = 0; i < 12; i++) {
+    const actor = appleCarers[i % 3];
+    obsPlan.push({
+      plantId: apple.id,
+      userId: actor,
+      type: 'water',
+      daysAgo: Math.max(4, 190 - i * 15),
+      kind: 'water_due',
+      points: actor === yotam.id ? 10 : 15,
+    });
+  }
+
+  for (const item of obsPlan) {
+    const createdAt = daysAgo(item.daysAgo);
     const [obs] = await db
       .insert(observations)
       .values({
-        plantId: insertedPlants[entry.plantIdx].id,
-        userId: entry.userId,
-        type: entry.type === 'report' ? 'alert' : entry.type,
-        caption: entry.caption ?? null,
-        photoUrl: entry.photoUrl ?? null,
-        harvestQuantity: entry.harvestQuantity ?? null,
-        diseaseTag: entry.diseaseTag ?? null,
-        createdAt: entry.at,
+        plantId: item.plantId,
+        userId: item.userId,
+        type: item.type,
+        caption: item.caption ?? null,
+        photoUrl: item.photo ? demoPhoto(item.photo.emoji, item.photo.from, item.photo.to) : null,
+        harvestQuantity: item.harvestQuantity ?? null,
+        createdAt,
       })
       .returning({ id: observations.id });
-    insertedObservations.push(obs);
-  }
-
-  // Stewardships: Alex actively tends Demo's plaza tomatoes; Sam adopted
-  // Alex's alley tomatoes long ago and lapsed (decay demo); Alex freshly
-  // adopted Demo's jalapeños (active via the adoption grace window).
-  const adoptionRows = [
-    { userId: alex.id, plantId: insertedPlants[2].id, createdAt: daysAgo(10) },
-    { userId: sam.id, plantId: insertedPlants[1].id, createdAt: daysAgo(25) },
-    { userId: alex.id, plantId: insertedPlants[6].id, createdAt: daysAgo(2) },
-  ];
-  await db.insert(adoptions).values(adoptionRows);
-
-  // ── Karma replay ─────────────────────────────────────────────────────────
-  // Run the seeded history through the real economy (computeAward & friends)
-  // so demo karma obeys the same rules as production karma.
-
-  type LedgerRow = {
-    userId: number;
-    plantId: number | null;
-    observationId: number | null;
-    kind: KarmaKind;
-    points: number;
-    createdAt: Date;
-  };
-  const ledger: LedgerRow[] = [];
-
-  const earnedWithin24h = (userId: number, at: Date) =>
-    ledger
-      .filter((row) => row.userId === userId && at.getTime() - row.createdAt.getTime() < DAY && row.createdAt <= at)
-      .reduce((sum, row) => sum + row.points, 0);
-
-  const lastEarning = (kind: KarmaKind, plantId: number, userId?: number) => {
-    const matches = ledger.filter(
-      (row) =>
-        row.kind === kind &&
-        row.plantId === plantId &&
-        row.points > 0 &&
-        (userId === undefined || row.userId === userId)
-    );
-    return matches.length ? matches[matches.length - 1].createdAt : null;
-  };
-
-  const userById = new Map(insertedUsers.map((u) => [u.id, u]));
-  const karmaTotals = new Map<number, number>(insertedUsers.map((u) => [u.id, 0]));
-  const award = (row: LedgerRow) => {
-    ledger.push(row);
-    karmaTotals.set(row.userId, (karmaTotals.get(row.userId) ?? 0) + row.points);
-  };
-
-  // 1. Founding events (plant_new), in planting order.
-  const plantEvents = insertedPlants
-    .map((plant) => ({ plant, at: plant.plantedAt }))
-    .sort((a, b) => a.at.getTime() - b.at.getTime());
-  for (const { plant, at } of plantEvents) {
-    const founder = userById.get(plant.plantedBy)!;
-    const result = plantNewPoints({
-      earningPlantsLast24h: ledger.filter(
-        (row) =>
-          row.userId === plant.plantedBy &&
-          row.kind === 'plant_new' &&
-          row.points > 0 &&
-          at.getTime() - row.createdAt.getTime() < DAY
-      ).length,
-      accountCreatedAt: founder.createdAt,
-      currentKarma: karmaTotals.get(plant.plantedBy) ?? 0,
-      earnedLast24h: earnedWithin24h(plant.plantedBy, at),
-      now: at,
-    });
-    award({ userId: plant.plantedBy, plantId: plant.id, observationId: null, kind: 'plant_new', points: result.points, createdAt: at });
-  }
-
-  // 2. Care events through computeAward, tracking evolving plant state.
-  const simState = new Map(
-    insertedPlants.map((plant) => [
-      plant.id,
-      { lastWateredAt: plant.plantedAt as Date | null, sticky: null as string | null, verified: false },
-    ])
-  );
-  const latestAlertByPlant = new Map<number, { userId: number; createdAt: Date; observationId: number }>();
-
-  careLog.forEach((entry, i) => {
-    const plant = insertedPlants[entry.plantIdx];
-    const spRow = insertedSpecies.find((s) => s.id === plant.speciesId)!;
-    const user = userById.get(entry.userId)!;
-    const state = simState.get(plant.id)!;
-    const observationId = insertedObservations[i].id;
-
-    const status = state.sticky ?? computeStatus(
-      { status: 'growing', plantedAt: plant.plantedAt, lastWateredAt: state.lastWateredAt },
-      spRow
-    );
-
-    const result = computeAward({
-      actorId: entry.userId,
-      actionType: entry.type,
-      now: entry.at,
-      plant: { plantedBy: plant.plantedBy, plantedAt: plant.plantedAt, lastWateredAt: state.lastWateredAt, status },
-      species: { wateringFrequencyDays: spRow.wateringFrequencyDays, daysToHarvest: spRow.daysToHarvest },
-      plantVerified: state.verified,
-      hasPhoto: !!entry.photoUrl,
-      lastEarnedSameKindByUserAt: lastEarning(entry.type === 'water' ? 'water_due' : (entry.type as KarmaKind), plant.id, entry.userId),
-      lastEarnedSameKindOnPlantAt: lastEarning(entry.type === 'water' ? 'water_due' : (entry.type as KarmaKind), plant.id),
-      latestAlert: latestAlertByPlant.get(plant.id) ?? null,
-      earnedLast24h: earnedWithin24h(entry.userId, entry.at),
-      accountCreatedAt: user.createdAt,
-      currentKarma: karmaTotals.get(entry.userId) ?? 0,
-    });
-
-    award({ userId: entry.userId, plantId: plant.id, observationId, kind: result.kind, points: result.points, createdAt: entry.at });
-    if (result.rescueBonus > 0) {
-      award({ userId: entry.userId, plantId: plant.id, observationId, kind: 'rescue_bonus', points: result.rescueBonus, createdAt: entry.at });
-    }
-
-    // Retroactive reporter payout on cross-user resolve.
-    const alert = latestAlertByPlant.get(plant.id);
-    if (entry.type === 'resolve' && alert && alert.userId !== entry.userId) {
-      award({
-        userId: alert.userId,
-        plantId: plant.id,
-        observationId: alert.observationId,
-        kind: 'report_confirmed',
-        points: reportConfirmedPoints(alert.userId, plant.plantedBy),
-        createdAt: entry.at,
+    if (item.kind) {
+      await db.insert(karmaEvents).values({
+        userId: item.userId,
+        plantId: item.plantId,
+        observationId: obs.id,
+        kind: item.kind,
+        points: item.points ?? 0,
+        createdAt,
       });
-      latestAlertByPlant.delete(plant.id);
     }
-
-    // First-harvest founder bonus (cap-exempt, once per plant).
-    if (
-      entry.type === 'harvest' &&
-      (state.verified || entry.photoUrl) &&
-      !ledger.some((row) => row.plantId === plant.id && row.kind === 'plant_first_harvest')
-    ) {
-      award({ userId: plant.plantedBy, plantId: plant.id, observationId: null, kind: 'plant_first_harvest', points: POINTS.plantFirstHarvest, createdAt: entry.at });
+    if (item.rescue) {
+      await db.insert(karmaEvents).values({
+        userId: item.userId,
+        plantId: item.plantId,
+        observationId: obs.id,
+        kind: 'rescue_bonus',
+        points: item.rescue,
+        createdAt,
+      });
     }
-
-    // Evolve simulated plant state.
-    if (entry.type === 'water') state.lastWateredAt = entry.at;
-    if (entry.photoUrl) state.verified = true;
-    if (entry.type === 'report') {
-      state.sticky = entry.diseaseTag ? 'diseased' : 'needs_attention';
-      latestAlertByPlant.set(plant.id, { userId: entry.userId, createdAt: entry.at, observationId });
-    }
-    if (entry.type === 'resolve') state.sticky = null;
-  });
-
-  // 3. Adoption events (first adoption of each plant pays).
-  for (const adoption of adoptionRows) {
-    award({ userId: adoption.userId, plantId: adoption.plantId, observationId: null, kind: 'adopt', points: POINTS.adopt, createdAt: adoption.createdAt });
   }
 
-  // 4. Established-founder bonus for plants that earned it.
+  // Planting rewards + founder bonuses + adoption events.
   for (const plant of insertedPlants) {
-    const state = simState.get(plant.id)!;
-    const careObs = careLog.filter((entry) => insertedPlants[entry.plantIdx].id === plant.id);
-    const carers = new Set(careObs.map((entry) => entry.userId));
-    const eligible = plantEstablishedEligible({
-      plantVerified: state.verified,
-      plantAgeDays: (Date.now() - plant.plantedAt.getTime()) / DAY,
-      careObservationCount: careObs.length,
-      distinctCarers: carers.size,
-      hasNonFounderCarer: [...carers].some((id) => id !== plant.plantedBy),
+    await db.insert(karmaEvents).values({
+      userId: plant.plantedBy,
+      plantId: plant.id,
+      kind: 'plant_new',
+      points: 10,
+      createdAt: plant.plantedAt,
     });
-    if (eligible && !ledger.some((row) => row.plantId === plant.id && row.kind === 'plant_established')) {
-      const lastCare = careObs[careObs.length - 1];
-      award({ userId: plant.plantedBy, plantId: plant.id, observationId: null, kind: 'plant_established', points: POINTS.plantEstablished, createdAt: lastCare.at });
+  }
+  await db.insert(karmaEvents).values([
+    { userId: noa.id, plantId: fig.id, kind: 'plant_established', points: 15, createdAt: daysAgo(110) },
+    { userId: noa.id, plantId: fig.id, kind: 'plant_first_harvest', points: 25, createdAt: daysAgo(3) },
+    { userId: tamar.id, plantId: lemon.id, kind: 'plant_established', points: 15, createdAt: daysAgo(330) },
+    { userId: tamar.id, plantId: lemon.id, kind: 'plant_first_harvest', points: 25, createdAt: daysAgo(200) },
+    { userId: amit.id, plantId: fig.id, kind: 'adopt', points: 3, createdAt: daysAgo(100) },
+    { userId: dana.id, plantId: fig.id, kind: 'adopt', points: 3, createdAt: daysAgo(30) },
+    { userId: noa.id, plantId: lemon.id, kind: 'adopt', points: 3, createdAt: daysAgo(150) },
+    { userId: dana.id, plantId: tomatoes.id, kind: 'adopt', points: 3, createdAt: daysAgo(20) },
+    { userId: tamar.id, plantId: apple.id, kind: 'adopt', points: 3, createdAt: daysAgo(90) },
+  ]);
+
+  // Karma = exact ledger sum, so profile numbers always reconcile.
+  await db.execute(sql`
+    update users u set karma = coalesce((
+      select sum(k.points) from karma_events k where k.user_id = u.id
+    ), 0)
+  `);
+
+  // Badges from real metrics, using the production evaluator.
+  for (const user of insertedUsers) {
+    const [kindRows, extraRows] = await Promise.all([
+      db
+        .select({
+          kind: karmaEvents.kind,
+          earning: sql<number>`count(*) filter (where ${karmaEvents.points} > 0)::int`,
+          total: sql<number>`count(*)::int`,
+        })
+        .from(karmaEvents)
+        .where(eq(karmaEvents.userId, user.id))
+        .groupBy(karmaEvents.kind),
+      db
+        .select({
+          plantsFounded: sql<number>`(select count(*) from plants p where p.planted_by = ${user.id})::int`,
+          verifiedHarvests: sql<number>`(select count(*) from observations o where o.user_id = ${user.id} and o.type = 'harvest' and o.photo_url is not null)::int`,
+          goodNeighbor: sql<number>`(
+            select count(*) from karma_events k join plants p on p.id = k.plant_id
+            where k.user_id = ${user.id} and k.points > 0
+              and k.kind in ('water_due','photo','harvest','resolve') and p.planted_by <> ${user.id}
+          )::int`,
+          karma: sql<number>`(select karma from users x where x.id = ${user.id})::int`,
+        })
+        .from(sql`(select 1) as one`),
+    ]);
+    const byKind = new Map(kindRows.map((row) => [row.kind, row]));
+    const metrics: Partial<Record<BadgeMetric, number>> = {
+      plantsFounded: extraRows[0]?.plantsFounded ?? 0,
+      earningHarvests: byKind.get('harvest')?.earning ?? 0,
+      verifiedHarvests: extraRows[0]?.verifiedHarvests ?? 0,
+      earningWaterDue: byKind.get('water_due')?.earning ?? 0,
+      rescueBonuses: byKind.get('rescue_bonus')?.total ?? 0,
+      goodNeighborEvents: extraRows[0]?.goodNeighbor ?? 0,
+      adopts: byKind.get('adopt')?.total ?? 0,
+      reportsConfirmed: byKind.get('report_confirmed')?.total ?? 0,
+      earningPhotos: byKind.get('photo')?.earning ?? 0,
+      firstHarvestBonuses: byKind.get('plant_first_harvest')?.total ?? 0,
+      karma: extraRows[0]?.karma ?? 0,
+    };
+    const earned = evaluateBadges(metrics, []);
+    if (earned.length > 0) {
+      await db
+        .update(users)
+        .set({ badges: earned.map((badge) => badge.id) })
+        .where(eq(users.id, user.id));
     }
   }
 
-  await db.insert(karmaEvents).values(ledger);
-
-  // 5. Denormalized totals + badges derived from the replayed ledger.
-  for (const user of insertedUsers) {
-    const rows = ledger.filter((row) => row.userId === user.id);
-    const founded = insertedPlants.filter((p) => p.plantedBy === user.id);
-    const countKind = (kind: KarmaKind, earningOnly = true) =>
-      rows.filter((row) => row.kind === kind && (!earningOnly || row.points > 0)).length;
-    const metrics: Partial<Record<BadgeMetric, number>> = {
-      karma: karmaTotals.get(user.id) ?? 0,
-      plantsFounded: founded.length,
-      earningHarvests: countKind('harvest'),
-      verifiedHarvests: careLog.filter((e) => e.userId === user.id && e.type === 'harvest' && e.photoUrl).length,
-      earningWaterDue: countKind('water_due'),
-      rescueBonuses: countKind('rescue_bonus', false),
-      adopts: countKind('adopt', false),
-      reportsConfirmed: countKind('report_confirmed', false),
-      earningPhotos: countKind('photo'),
-      firstHarvestBonuses: countKind('plant_first_harvest', false),
-      goodNeighborEvents: rows.filter(
-        (row) =>
-          row.points > 0 &&
-          ['water_due', 'photo', 'harvest', 'resolve'].includes(row.kind) &&
-          row.plantId !== null &&
-          insertedPlants.find((p) => p.id === row.plantId)?.plantedBy !== user.id
-      ).length,
-    };
-    const badges = evaluateBadges(metrics, []).map((badge) => badge.id);
-    await db
-      .update(users)
-      .set({ karma: karmaTotals.get(user.id) ?? 0, badges })
-      .where(eq(users.id, user.id));
-  }
-
-  const totals = insertedUsers
-    .map((u) => `${u.displayName}: ${karmaTotals.get(u.id)}`)
-    .join(', ');
-  console.log(`Seeded ${insertedUsers.length} users, ${insertedSpecies.length} species, ${insertedPlants.length} plants, ${ledger.length} karma events.`);
-  console.log(`Karma → ${totals}`);
-  console.log('Demo login: demo@globalgarden.app / garden123');
-  process.exit(0);
+  const totals = await db
+    .select({ name: users.displayName, karma: users.karma, badges: users.badges })
+    .from(users);
+  console.log(
+    'Seeded:',
+    totals.map((t) => `${t.name}: ${t.karma} karma, ${(t.badges ?? []).length} badges`).join(' | ')
+  );
+  console.log(`Seeded ${insertedPlants.length} plants, ${obsPlan.length} observations. Done.`);
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+main()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

@@ -1,4 +1,5 @@
 import 'server-only';
+import type { Locale } from '@/i18n/config';
 
 /**
  * Outbound email. Uses the Resend HTTP API when RESEND_API_KEY is set;
@@ -49,50 +50,83 @@ export async function sendEmail(message: EmailMessage): Promise<{ delivered: boo
   return { delivered: true };
 }
 
-/** Shared shell so every email the app sends looks like it came from one place. */
-function emailLayout(title: string, bodyHtml: string): string {
+const COPY = {
+  en: {
+    dir: 'ltr',
+    brand: 'GLOBAL GARDEN',
+    verifySubject: 'Verify your email · Global Garden',
+    verifyTitle: 'Welcome to the garden',
+    verifyBody:
+      'Confirm your email address to start planting, watering, and earning karma. This link expires in 24 hours.',
+    verifyCta: 'Verify my email',
+    resetSubject: 'Reset your password · Global Garden',
+    resetTitle: 'Reset your password',
+    resetBody:
+      "Someone (hopefully you) asked to reset the password for your Global Garden account. This link expires in 1 hour; if you didn't ask for it, your password stays unchanged.",
+    resetCta: 'Choose a new password',
+    paste: 'Or paste this link into your browser:',
+    footer:
+      "You received this because of activity on your Global Garden account. If this wasn't you, you can safely ignore this email.",
+  },
+  he: {
+    dir: 'rtl',
+    brand: 'הגינה העולמית',
+    verifySubject: 'אימות אימייל · הגינה העולמית',
+    verifyTitle: 'ברוכים הבאים לגינה',
+    verifyBody: 'אשרו את כתובת האימייל כדי להתחיל לשתול, להשקות ולצבור קארמה. הקישור תקף ל־24 שעות.',
+    verifyCta: 'אימות האימייל שלי',
+    resetSubject: 'איפוס סיסמה · הגינה העולמית',
+    resetTitle: 'איפוס סיסמה',
+    resetBody:
+      'מישהו (בתקווה אתם) ביקש לאפס את הסיסמה לחשבון שלכם. הקישור תקף לשעה; אם לא ביקשתם — הסיסמה נשארת ללא שינוי.',
+    resetCta: 'בחירת סיסמה חדשה',
+    paste: 'או הדביקו את הקישור בדפדפן:',
+    footer: 'קיבלתם את ההודעה בגלל פעילות בחשבון הגינה העולמית שלכם. אם זה לא הייתם אתם, אפשר להתעלם מהמייל.',
+  },
+} as const;
+
+/** Grove-styled shell shared by every email the app sends. */
+function emailLayout(locale: Locale, title: string, bodyHtml: string): string {
+  const c = COPY[locale];
   return `<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background:#FAF7F0;font-family:Georgia,'Times New Roman',serif;color:#2C2A27;">
-    <div style="max-width:520px;margin:0 auto;padding:48px 24px;">
-      <p style="font-size:14px;letter-spacing:0.2em;text-transform:uppercase;color:#2D5016;margin:0 0 32px;">Global Garden</p>
-      <h1 style="font-size:26px;font-weight:600;margin:0 0 16px;">${title}</h1>
-      ${bodyHtml}
-      <p style="font-size:12px;color:#8B8478;margin-top:48px;border-top:1px solid #EFE9DD;padding-top:16px;">
-        You received this because of activity on your Global Garden account. If this wasn't you, you can safely ignore this email.
-      </p>
+<html dir="${c.dir}" lang="${locale}">
+  <body style="margin:0;padding:0;background:#ECE9E0;font-family:'Helvetica Neue',Arial,sans-serif;color:#20251C;">
+    <div style="max-width:520px;margin:0 auto;padding:40px 24px;" dir="${c.dir}">
+      <div style="background:#17402B;border-radius:20px;padding:28px;">
+        <p style="font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:#DCE7D6;margin:0 0 20px;font-weight:700;">${c.brand}</p>
+        <h1 style="font-size:26px;font-weight:800;margin:0 0 14px;color:#FAF8F2;">${title}</h1>
+        <div style="font-size:15px;line-height:1.6;color:rgba(250,248,242,0.85);">${bodyHtml}</div>
+      </div>
+      <p style="font-size:12px;color:#857D6C;margin-top:24px;line-height:1.5;">${c.footer}</p>
     </div>
   </body>
 </html>`;
 }
 
-function ctaButton(href: string, label: string): string {
-  return `<p style="margin:32px 0;">
-    <a href="${href}" style="background:#2D5016;color:#FAF7F0;text-decoration:none;padding:14px 28px;border-radius:999px;font-size:15px;display:inline-block;">${label}</a>
+function ctaButton(locale: Locale, href: string, label: string): string {
+  const c = COPY[locale];
+  return `<p style="margin:26px 0 18px;">
+    <a href="${href}" style="background:#C9A22B;color:#1D1607;text-decoration:none;padding:14px 28px;border-radius:999px;font-size:15px;font-weight:700;display:inline-block;">${label}</a>
   </p>
-  <p style="font-size:13px;color:#8B8478;word-break:break-all;">Or paste this link into your browser:<br>${href}</p>`;
+  <p style="font-size:12px;color:rgba(250,248,242,0.6);word-break:break-all;">${c.paste}<br>${href}</p>`;
 }
 
-export function verificationEmail(to: string, link: string): EmailMessage {
+export function verificationEmail(to: string, link: string, locale: Locale = 'en'): EmailMessage {
+  const c = COPY[locale];
   return {
     to,
-    subject: 'Verify your email · Global Garden',
-    text: `Welcome to Global Garden!\n\nConfirm your email address to start planting, watering, and earning karma:\n${link}\n\nThis link expires in 24 hours.`,
-    html: emailLayout(
-      'Welcome to the garden',
-      `<p style="font-size:15px;line-height:1.6;">Confirm your email address to start planting, watering, and earning karma. This link expires in 24 hours.</p>${ctaButton(link, 'Verify my email')}`
-    ),
+    subject: c.verifySubject,
+    text: `${c.verifyTitle}\n\n${c.verifyBody}\n${link}`,
+    html: emailLayout(locale, c.verifyTitle, `<p style="margin:0;">${c.verifyBody}</p>${ctaButton(locale, link, c.verifyCta)}`),
   };
 }
 
-export function passwordResetEmail(to: string, link: string): EmailMessage {
+export function passwordResetEmail(to: string, link: string, locale: Locale = 'en'): EmailMessage {
+  const c = COPY[locale];
   return {
     to,
-    subject: 'Reset your password · Global Garden',
-    text: `Someone (hopefully you) asked to reset the password for your Global Garden account.\n\nChoose a new password here:\n${link}\n\nThis link expires in 1 hour. If you didn't ask for this, ignore this email — your password is unchanged.`,
-    html: emailLayout(
-      'Reset your password',
-      `<p style="font-size:15px;line-height:1.6;">Someone (hopefully you) asked to reset the password for your Global Garden account. This link expires in 1 hour; if you didn't ask for it, your password stays unchanged.</p>${ctaButton(link, 'Choose a new password')}`
-    ),
+    subject: c.resetSubject,
+    text: `${c.resetTitle}\n\n${c.resetBody}\n${link}`,
+    html: emailLayout(locale, c.resetTitle, `<p style="margin:0;">${c.resetBody}</p>${ctaButton(locale, link, c.resetCta)}`),
   };
 }

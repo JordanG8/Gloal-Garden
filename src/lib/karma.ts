@@ -136,6 +136,8 @@ export interface AwardResult {
   kind: KarmaKind;
   /** Final points after multiplier and daily cap. */
   points: number;
+  /** Pre-multiplier, pre-cap base — for the karma breakdown UI. */
+  basePoints: number;
   /** Rescue bonus, capped, recorded as a separate ledger row when > 0. */
   rescueBonus: number;
   /** Microcopy shown to the user when nothing (or less) was earned. */
@@ -174,14 +176,14 @@ export function computeAward(ctx: AwardContext): AwardResult {
       if (sinceWaterDays >= WATER_DUE_FRACTION * freq) {
         kind = 'water_due';
         base = ctx.plantVerified ? POINTS.waterDue : POINTS.waterDueUnverified;
-        if (!ctx.plantVerified) note = 'Half points — add a photo to verify this plant.';
+        if (!ctx.plantVerified) note = 'note_unverified_half';
         const wasCritical = STICKY_ALERT_STATUSES.includes(plant.status);
         if (wasCritical || sinceWaterDays >= RESCUE_OVERDUE_MULTIPLE * freq) {
           rescue = POINTS.rescueBonus;
         }
       } else {
         kind = 'water_early';
-        note = 'No points — this plant was not due for water yet.';
+        note = 'note_water_not_due';
       }
       break;
     }
@@ -192,7 +194,7 @@ export function computeAward(ctx: AwardContext): AwardResult {
         ctx.lastEarnedSameKindByUserAt !== null &&
         hoursSince(ctx.lastEarnedSameKindByUserAt, now) < PHOTO_USER_COOLDOWN_HOURS;
       if (onCooldown) {
-        note = 'No points — you already logged an update on this plant today.';
+        note = 'note_photo_cooldown';
       } else {
         base = ctx.hasPhoto ? POINTS.photo : POINTS.photoNoteOnly;
       }
@@ -215,14 +217,14 @@ export function computeAward(ctx: AwardContext): AwardResult {
         hoursSince(ctx.lastEarnedSameKindOnPlantAt, now) < HARVEST_PLANT_COOLDOWN_HOURS;
 
       if (!verified) {
-        note = 'No points — verify this plant with a photo first (or attach one to the harvest).';
+        note = 'note_harvest_unverified';
       } else if (tooYoung) {
-        note = 'No points — this plant is too young for a real harvest.';
+        note = 'note_harvest_too_young';
       } else if (userCooldown || plantCooldown) {
-        note = 'No points — this plant was already credited for a recent harvest.';
+        note = 'note_harvest_cooldown';
       } else {
         base = ctx.hasPhoto ? POINTS.harvest : POINTS.harvestNoPhoto;
-        if (!ctx.hasPhoto) note = 'Tip: photo-verified harvests earn double.';
+        if (!ctx.hasPhoto) note = 'note_harvest_photo_tip';
       }
       break;
     }
@@ -232,7 +234,7 @@ export function computeAward(ctx: AwardContext): AwardResult {
       // confirmed. The reporter is paid via report_confirmed when a DIFFERENT
       // user resolves the alert.
       kind = 'report';
-      note = 'Report logged — you earn points when a neighbor confirms and resolves it.';
+      note = 'note_report_pending';
       break;
     }
 
@@ -248,11 +250,11 @@ export function computeAward(ctx: AwardContext): AwardResult {
         hoursSince(ctx.lastEarnedSameKindOnPlantAt, now) < RESOLVE_PLANT_COOLDOWN_HOURS;
 
       if (!wasSticky) {
-        note = 'No points — this plant had no open alert.';
+        note = 'note_resolve_no_alert';
       } else if (ownRecentAlert) {
-        note = 'No points — you filed this alert; let a neighbor confirm, or give it a day.';
+        note = 'note_resolve_own_alert';
       } else if (plantCooldown) {
-        note = 'No points — this plant was already credited for a recent resolve.';
+        note = 'note_resolve_cooldown';
       } else {
         base = POINTS.resolve;
         rescue = POINTS.rescueBonus;
@@ -270,10 +272,10 @@ export function computeAward(ctx: AwardContext): AwardResult {
     // Trim the main award first, then the rescue bonus.
     points = Math.min(points, remaining);
     rescueBonus = Math.min(rescueBonus, remaining - points);
-    if (raw > 0) note = 'Daily karma cap reached — the garden will be here tomorrow.';
+    if (raw > 0) note = 'note_daily_cap';
   }
 
-  return { kind, points, rescueBonus, note };
+  return { kind, points, basePoints: base, rescueBonus, note };
 }
 
 /** Points for creating a plant. `earningPlantsLast24h` counts prior EARNING plant_new events. */
@@ -288,7 +290,7 @@ export function plantNewPoints(input: {
     ? PLANT_NEW_EARNING_PER_DAY_NEW_ACCOUNT
     : PLANT_NEW_EARNING_PER_DAY;
   if (input.earningPlantsLast24h >= limit) {
-    return { points: 0, note: 'No points — daily planting bonus used up (the plant still counts!).' };
+    return { points: 0, note: 'note_plant_daily_limit' };
   }
   const cap = dailyCapFor(input.accountCreatedAt, input.currentKarma, input.now);
   const remaining = Math.max(0, cap - input.earnedLast24h);

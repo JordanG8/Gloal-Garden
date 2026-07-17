@@ -8,11 +8,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export async function getUserProfile(id: number): Promise<UserProfile | null> {
   try {
-    const [userRows, statRows, rescueRows, stewardshipRows, eventRows] = await Promise.all([
+    const weekAgo = new Date(Date.now() - 7 * DAY_MS);
+    const [userRows, statRows, rescueRows, stewardshipRows, eventRows, weekRows] = await Promise.all([
       db
         .select({
           id: users.id,
           displayName: users.displayName,
+          avatar: users.avatar,
           bio: users.bio,
           location: users.location,
           createdAt: users.createdAt,
@@ -72,6 +74,10 @@ export async function getUserProfile(id: number): Promise<UserProfile | null> {
         .where(eq(karmaEvents.userId, id))
         .orderBy(desc(karmaEvents.createdAt))
         .limit(20),
+      db
+        .select({ total: sql<number>`coalesce(sum(${karmaEvents.points}), 0)::int` })
+        .from(karmaEvents)
+        .where(and(eq(karmaEvents.userId, id), gt(karmaEvents.createdAt, weekAgo))),
     ]);
 
     const user = userRows[0];
@@ -81,10 +87,12 @@ export async function getUserProfile(id: number): Promise<UserProfile | null> {
     return {
       id: user.id,
       displayName: user.displayName,
+      avatar: user.avatar,
       bio: user.bio,
       location: user.location,
       createdAt: user.createdAt.toISOString(),
       karma: user.karma,
+      karma7d: weekRows[0]?.total ?? 0,
       badges: user.badges ?? [],
       stats: {
         plantsFounded: stats?.plantsFounded ?? 0,
@@ -128,6 +136,7 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
         .select({
           id: users.id,
           displayName: users.displayName,
+          avatar: users.avatar,
           karma: users.karma,
           badges: users.badges,
         })
@@ -148,6 +157,7 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
     return rows.map((row) => ({
       id: row.id,
       displayName: row.displayName,
+      avatar: row.avatar,
       karma: row.karma,
       karma7d: weekByUser.get(row.id) ?? 0,
       badges: row.badges ?? [],
@@ -155,5 +165,66 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
   } catch (error) {
     console.error('Failed to load leaderboard:', error);
     return [];
+  }
+}
+
+/**
+ * Current value of every badge metric for a user — powers the locked-badge
+ * progress numbers (e.g. "23/50") on the profile.
+ */
+export async function getBadgeProgress(
+  id: number
+): Promise<Partial<Record<import('./karma').BadgeMetric, number>>> {
+  try {
+    const [kindRows, extraRows] = await Promise.all([
+      db
+        .select({
+          kind: karmaEvents.kind,
+          earning: sql<number>`count(*) filter (where ${karmaEvents.points} > 0)::int`,
+          total: sql<number>`count(*)::int`,
+        })
+        .from(karmaEvents)
+        .where(eq(karmaEvents.userId, id))
+        .groupBy(karmaEvents.kind),
+      db
+        .select({
+          plantsFounded: sql<number>`(select count(*) from plants p where p.planted_by = ${id})::int`,
+          verifiedHarvests: sql<number>`(
+            select count(*) from observations o
+            where o.user_id = ${id} and o.type = 'harvest' and o.photo_url is not null
+          )::int`,
+          goodNeighbor: sql<number>`(
+            select count(*) from karma_events k
+            join plants p on p.id = k.plant_id
+            where k.user_id = ${id} and k.points > 0
+              and k.kind in ('water_due', 'photo', 'harvest', 'resolve')
+              and p.planted_by <> ${id}
+          )::int`,
+          karma: sql<number>`(select karma from users u where u.id = ${id})::int`,
+        })
+        .from(sql`(select 1) as one`),
+    ]);
+
+    const byKind = new Map(kindRows.map((row) => [row.kind, row]));
+    const earning = (kind: string) => byKind.get(kind)?.earning ?? 0;
+    const total = (kind: string) => byKind.get(kind)?.total ?? 0;
+    const extra = extraRows[0];
+
+    return {
+      plantsFounded: extra?.plantsFounded ?? 0,
+      earningHarvests: earning('harvest'),
+      verifiedHarvests: extra?.verifiedHarvests ?? 0,
+      earningWaterDue: earning('water_due'),
+      rescueBonuses: total('rescue_bonus'),
+      goodNeighborEvents: extra?.goodNeighbor ?? 0,
+      adopts: total('adopt'),
+      reportsConfirmed: total('report_confirmed'),
+      earningPhotos: earning('photo'),
+      firstHarvestBonuses: total('plant_first_harvest'),
+      karma: extra?.karma ?? 0,
+    };
+  } catch (error) {
+    console.error('getBadgeProgress failed:', error);
+    return {};
   }
 }

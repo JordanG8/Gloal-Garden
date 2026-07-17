@@ -23,21 +23,31 @@ export async function getSessionUser(): Promise<SessionUser | null> {
 
   let karma = 0;
   let emailVerified = true;
+  let avatar: string | null = null;
+  let name = session?.user?.name ?? 'Gardener';
   try {
     const [row] = await db
-      .select({ karma: users.karma, emailVerifiedAt: users.emailVerifiedAt })
+      .select({
+        karma: users.karma,
+        emailVerifiedAt: users.emailVerifiedAt,
+        avatar: users.avatar,
+        displayName: users.displayName,
+      })
       .from(users)
       .where(eq(users.id, id))
       .limit(1);
     karma = row?.karma ?? 0;
     emailVerified = !!row?.emailVerifiedAt;
+    avatar = row?.avatar ?? null;
+    if (row?.displayName) name = row.displayName;
   } catch (error) {
     console.error('Failed to load viewer karma:', error);
   }
 
   return {
     id,
-    name: session?.user?.name ?? 'Gardener',
+    name,
+    avatar,
     karma,
     trustLevel: trustLevelFor(karma).level,
     emailVerified,
@@ -64,5 +74,5 @@ export async function emailVerificationBlocker(userId: number): Promise<string |
     console.error('Failed to check email verification:', error);
     return null;
   }
-  return 'Please verify your email first — check your inbox for the link, or resend it from the account menu.';
+  return 'error_verify_email';
 }

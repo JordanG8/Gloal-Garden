@@ -7,6 +7,8 @@ export interface PlantSummary {
   lng: number;
   category: string;
   speciesName: string;
+  speciesNameHe: string | null;
+  emoji: string;
   scientificName: string;
   status: PlantStatus;
   isNew: boolean;
@@ -20,17 +22,24 @@ export interface PlantSummary {
   accessNotes: string | null;
   wateringFrequencyDays: number | null;
   daysToHarvest: number | null;
+  latestPhotoUrl: string | null;
+  photoCount: number;
 }
 
 export interface SpeciesOption {
   id: number;
   commonName: string;
+  commonNameHe: string | null;
   category: string;
+  emoji: string;
 }
 
 export interface ObservationEntry {
   id: number;
   type: string;
+  userId: number;
+  userAvatar: string | null;
+  points: number;
   caption: string | null;
   photoUrl: string | null;
   harvestQuantity: string | null;
@@ -42,6 +51,7 @@ export interface ObservationEntry {
 export interface SessionUser {
   id: number;
   name: string;
+  avatar: string | null;
   karma: number;
   trustLevel: number;
   emailVerified: boolean;
@@ -52,6 +62,7 @@ export interface SessionUser {
 export interface StewardEntry {
   id: number;
   name: string;
+  avatar: string | null;
   active: boolean;
   adoptedAt: string;
 }
@@ -59,10 +70,12 @@ export interface StewardEntry {
 export interface UserProfile {
   id: number;
   displayName: string;
+  avatar: string | null;
   bio: string | null;
   location: string | null;
   createdAt: string;
   karma: number;
+  karma7d: number;
   badges: string[];
   stats: {
     plantsFounded: number;
@@ -92,11 +105,21 @@ export interface UserProfile {
 export interface LeaderboardRow {
   id: number;
   displayName: string;
+  avatar: string | null;
   karma: number;
   karma7d: number;
   badges: string[];
 }
 
+export interface KarmaBreakdown {
+  kind: string;
+  base: number;
+  communityBonus: number;
+  rescueBonus: number;
+  isCommunity: boolean;
+  totalKarma: number;
+}
+
 export type ActionResult =
-  | { ok: true; pointsAwarded?: number; newBadges?: string[]; note?: string }
+  | { ok: true; pointsAwarded?: number; newBadges?: string[]; note?: string; breakdown?: KarmaBreakdown }
   | { ok: false; error: string };

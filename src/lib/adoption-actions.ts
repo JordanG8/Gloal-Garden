@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/db';
+import { db, runBatch } from '@/db';
 import { adoptions, karmaEvents, plants, species, users } from '@/db/schema';
 import { and, eq, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -28,7 +28,7 @@ export async function adoptPlant(plantId: number): Promise<ActionResult> {
       .limit(1);
     if (!plant) return { ok: false, error: 'Plant not found.' };
     if (plant.plantedBy === userId) {
-      return { ok: false, error: 'You planted this one — founders are stewards for life.' };
+      return { ok: false, error: 'error_adopt_founder' };
     }
 
     const [existing] = await db
@@ -36,7 +36,7 @@ export async function adoptPlant(plantId: number): Promise<ActionResult> {
       .from(adoptions)
       .where(and(eq(adoptions.userId, userId), eq(adoptions.plantId, plantId)))
       .limit(1);
-    if (existing) return { ok: false, error: 'You already steward this plant.' };
+    if (existing) return { ok: false, error: 'error_adopt_already' };
 
     const [user] = await db
       .select({ karma: users.karma })
@@ -74,10 +74,7 @@ export async function adoptPlant(plantId: number): Promise<ActionResult> {
     ).length;
 
     if (activeCount >= cap) {
-      return {
-        ok: false,
-        error: `You're already actively stewarding ${activeCount} plants — your trust level caps at ${cap}. Earn karma to raise the cap.`,
-      };
+      return { ok: false, error: 'error_adopt_cap' };
     }
 
     // Adoption pays once per (user, plant) EVER — re-adopting after abandoning
@@ -100,12 +97,12 @@ export async function adoptPlant(plantId: number): Promise<ActionResult> {
       db.insert(karmaEvents).values({ userId, plantId, kind: 'adopt', points }),
     ] as const;
     if (points > 0) {
-      await db.batch([
+      await runBatch([
         ...statements,
         db.update(users).set({ karma: sql`${users.karma} + ${points}` }).where(eq(users.id, userId)),
       ]);
     } else {
-      await db.batch([...statements]);
+      await runBatch([...statements]);
     }
 
     revalidatePath('/');

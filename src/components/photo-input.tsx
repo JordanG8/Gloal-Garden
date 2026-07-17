@@ -1,22 +1,24 @@
-"use client";
+'use client';
 
-import { useRef, useState } from "react";
-import { Camera, ImagePlus, X, Loader2 } from "lucide-react";
+/* eslint-disable @next/next/no-img-element */
+
+import { useRef, useState } from 'react';
+import { useI18n } from '@/i18n/provider';
+import { IconCamera, IconClose } from './icons';
 
 const MAX_DIMENSION = 1600;
 const JPEG_QUALITY = 0.82;
 
 /**
- * Downscale + re-encode client-side so phone photos (often 5–15 MB) become
- * a few hundred KB before they ever hit the network. Also normalizes EXIF
- * rotation via createImageBitmap.
+ * Downscale + re-encode client-side so phone photos (often 5–15 MB) become a
+ * few hundred KB before they ever hit the network. Also normalizes EXIF
+ * rotation via createImageBitmap, so photos from any OS come out upright.
  */
 async function compressImage(file: File): Promise<Blob> {
   let bitmap: ImageBitmap;
   try {
-    bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
   } catch {
-    // Some older browsers can't decode via createImageBitmap — send as-is.
     return file;
   }
 
@@ -24,45 +26,51 @@ async function compressImage(file: File): Promise<Blob> {
   const width = Math.round(bitmap.width * scale);
   const height = Math.round(bitmap.height * scale);
 
-  const canvas = document.createElement("canvas");
+  const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext('2d');
   if (!ctx) return file;
   ctx.drawImage(bitmap, 0, 0, width, height);
   bitmap.close();
 
   const blob = await new Promise<Blob | null>((resolve) =>
-    canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY)
+    canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY)
   );
   return blob ?? file;
 }
 
 /**
- * Photo picker for care logs: take a picture with the phone camera or choose
- * one from the gallery. Uploads immediately and exposes the stored URL via a
- * hidden form field, so parent forms just read `formData.get(name)`.
+ * Photo picker: camera on phones (capture="environment"), file picker on
+ * desktop — one tap opens the OS chooser which offers both where available.
+ * Uploads immediately; exposes the stored URL via a hidden form field.
  */
 export default function PhotoInput({
   name,
-  label = "Photo",
+  label,
+  height = 120,
+  round = false,
+  initialUrl = '',
   onChange,
 }: {
   name: string;
-  label?: string;
+  label: string;
+  height?: number;
+  round?: boolean;
+  initialUrl?: string;
   onChange?: (url: string) => void;
 }) {
-  const cameraRef = useRef<HTMLInputElement>(null);
-  const galleryRef = useRef<HTMLInputElement>(null);
-  const [url, setUrl] = useState("");
-  const [preview, setPreview] = useState("");
+  const { dict } = useI18n();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [url, setUrl] = useState(initialUrl);
+  const [preview, setPreview] = useState(initialUrl);
   const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   function setPhoto(nextUrl: string, nextPreview: string) {
     setUrl(nextUrl);
     setPreview((old) => {
-      if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+      if (old.startsWith('blob:')) URL.revokeObjectURL(old);
       return nextPreview;
     });
     onChange?.(nextUrl);
@@ -70,105 +78,85 @@ export default function PhotoInput({
 
   async function handleFile(file: File | undefined | null) {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("That file isn't an image.");
+    if (!file.type.startsWith('image/')) {
+      setError(dict.common.notAnImage);
       return;
     }
-    setError("");
+    setError('');
     setUploading(true);
-    setPhoto("", URL.createObjectURL(file));
+    setPhoto('', URL.createObjectURL(file));
 
     try {
       const compressed = await compressImage(file);
       const body = new FormData();
-      body.append("file", compressed, "photo.jpg");
-      const res = await fetch("/api/uploads", { method: "POST", body });
+      body.append('file', compressed, 'photo.jpg');
+      const res = await fetch('/api/uploads', { method: 'POST', body });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.url) {
-        throw new Error(data?.error ?? "Upload failed. Please try again.");
+        throw new Error(data?.error ?? dict.common.uploadFailed);
       }
       setUrl(data.url);
       onChange?.(data.url);
     } catch (err) {
-      setPhoto("", "");
-      setError(err instanceof Error ? err.message : "Upload failed. Please try again.");
+      setPhoto('', '');
+      setError(err instanceof Error ? err.message : dict.common.uploadFailed);
     } finally {
       setUploading(false);
     }
   }
 
-  function clearPhoto() {
-    setPhoto("", "");
-    setError("");
-    if (cameraRef.current) cameraRef.current.value = "";
-    if (galleryRef.current) galleryRef.current.value = "";
-  }
+  const radiusCls = round ? 'rounded-full' : 'rounded-2xl';
 
   return (
-    <div>
+    <div className={round ? 'inline-block' : ''}>
       <input type="hidden" name={name} value={url} />
-      {/* capture="environment" opens the rear camera directly on phones */}
       <input
-        ref={cameraRef}
+        ref={inputRef}
         type="file"
         accept="image/*"
-        capture="environment"
         className="hidden"
-        onChange={(e) => handleFile(e.target.files?.[0])}
-      />
-      <input
-        ref={galleryRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp"
-        className="hidden"
-        onChange={(e) => handleFile(e.target.files?.[0])}
+        onChange={(e) => {
+          handleFile(e.target.files?.[0]);
+          e.target.value = '';
+        }}
       />
 
       {preview ? (
-        <div className="relative overflow-hidden rounded-2xl border border-border">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={preview} alt="Selected plant photo" className="h-44 w-full object-cover" />
+        <div
+          className={`relative overflow-hidden border border-line ${radiusCls}`}
+          style={round ? { width: height, height } : { height }}
+        >
+          <img src={preview} alt="" className="h-full w-full object-cover" />
           {uploading && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-white">
-              <Loader2 className="h-6 w-6 animate-spin" strokeWidth={1.75} />
+            <div className="absolute inset-0 flex items-center justify-center bg-ink/45">
+              <span className="h-6 w-6 animate-spin rounded-full border-2 border-cream border-t-transparent" />
             </div>
           )}
           <button
             type="button"
-            onClick={clearPhoto}
-            className="absolute right-2.5 top-2.5 rounded-full bg-black/50 p-1.5 text-white backdrop-blur-sm transition hover:bg-black/70"
-            aria-label="Remove photo"
+            onClick={() => {
+              setPhoto('', '');
+              setError('');
+            }}
+            className="absolute end-2 top-2 rounded-full bg-ink/55 p-1.5 text-white backdrop-blur-sm transition hover:bg-ink/75"
+            aria-label={dict.common.removePhoto}
           >
-            <X className="h-4 w-4" strokeWidth={2} />
+            <IconClose size={14} />
           </button>
         </div>
       ) : (
-        <div>
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            {label}
-          </p>
-          <div className="grid grid-cols-2 gap-2.5">
-            <button
-              type="button"
-              onClick={() => cameraRef.current?.click()}
-              className="flex flex-col items-center gap-1.5 rounded-2xl border border-dashed border-border bg-background py-4 text-muted-foreground transition hover:border-primary/50 hover:text-primary"
-            >
-              <Camera className="h-5 w-5" strokeWidth={1.75} />
-              <span className="text-xs font-medium">Take photo</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => galleryRef.current?.click()}
-              className="flex flex-col items-center gap-1.5 rounded-2xl border border-dashed border-border bg-background py-4 text-muted-foreground transition hover:border-primary/50 hover:text-primary"
-            >
-              <ImagePlus className="h-5 w-5" strokeWidth={1.75} />
-              <span className="text-xs font-medium">From gallery</span>
-            </button>
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className={`relative flex w-full flex-col items-center justify-center gap-2 border-[1.5px] border-dashed border-[#C9BFA8] bg-cream text-muted-foreground transition hover:border-forest hover:text-forest active:scale-[0.99] ${radiusCls}`}
+          style={round ? { width: height, height } : { height }}
+        >
+          <IconCamera size={round ? 22 : 24} />
+          {!round && <span className="px-4 text-center text-[12.5px] font-semibold">{label}</span>}
+        </button>
       )}
 
-      {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+      {error && <p className="mt-2 text-[12.5px] font-medium text-destructive">{error}</p>}
     </div>
   );
 }

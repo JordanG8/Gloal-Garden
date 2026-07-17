@@ -11,18 +11,28 @@ import { redirect } from 'next/navigation';
 import { createAuthToken, consumeAuthToken, isOnResendCooldown } from './auth-tokens';
 import { sendEmail, verificationEmail, passwordResetEmail } from './email';
 import { requireUserId } from './auth-helpers';
+import { isLocale, type Locale } from '@/i18n/config';
 
+/**
+ * Form states carry machine keys (not English copy) so every screen can
+ * render them in the visitor's language via dict.authErrors[key].
+ */
 export interface AuthFormState {
   error: string;
 }
 
-/** Generic state for the verification / reset forms. */
 export interface SimpleFormState {
   status: 'idle' | 'success' | 'error';
+  /** dict.authErrors key */
   message: string;
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function localeOf(formData: FormData): Locale {
+  const raw = String(formData.get('locale') ?? '');
+  return isLocale(raw) ? raw : 'en';
+}
 
 async function baseUrl(): Promise<string> {
   const fromEnv = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL;
@@ -33,26 +43,27 @@ async function baseUrl(): Promise<string> {
   return `${proto}://${host}`;
 }
 
-async function sendVerificationLink(userId: number, email: string) {
+async function sendVerificationLink(userId: number, email: string, locale: Locale) {
   const token = await createAuthToken(userId, 'email_verify');
-  const link = `${await baseUrl()}/verify-email?token=${token}`;
-  await sendEmail(verificationEmail(email, link));
+  const link = `${await baseUrl()}/${locale}/verify-email?token=${token}`;
+  await sendEmail(verificationEmail(email, link, locale));
 }
 
 export async function loginAction(
   _prevState: AuthFormState | undefined,
   formData: FormData
 ): Promise<AuthFormState> {
+  const locale = localeOf(formData);
   try {
     await signIn('credentials', {
       email: formData.get('email'),
       password: formData.get('password'),
-      redirectTo: '/',
+      redirectTo: `/${locale}`,
     });
     return { error: '' };
   } catch (error) {
     if (error instanceof AuthError) {
-      return { error: 'Invalid email or password.' };
+      return { error: 'invalidCredentials' };
     }
     throw error;
   }
@@ -62,18 +73,19 @@ export async function signupAction(
   _prevState: AuthFormState | undefined,
   formData: FormData
 ): Promise<AuthFormState> {
+  const locale = localeOf(formData);
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
   const password = String(formData.get('password') ?? '');
   const displayName = String(formData.get('displayName') ?? '').trim();
 
-  if (!EMAIL_RE.test(email)) return { error: 'Please enter a valid email address.' };
-  if (password.length < 8) return { error: 'Password must be at least 8 characters.' };
-  if (displayName.length < 2) return { error: 'Display name must be at least 2 characters.' };
+  if (!EMAIL_RE.test(email)) return { error: 'invalidEmail' };
+  if (password.length < 8) return { error: 'passwordShort' };
+  if (displayName.length < 2) return { error: 'nameShort' };
 
   try {
     const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
     if (existing.length > 0) {
-      return { error: 'An account with that email already exists.' };
+      return { error: 'emailTaken' };
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -82,31 +94,32 @@ export async function signupAction(
       .values({ email, passwordHash, displayName })
       .returning({ id: users.id });
 
-    // A failed send must never block account creation — the map header offers
-    // a resend, and the console fallback covers unconfigured environments.
+    // A failed send must never block account creation — the verify screen
+    // offers a resend, and the console fallback covers unconfigured envs.
     try {
-      await sendVerificationLink(created.id, email);
+      await sendVerificationLink(created.id, email, locale);
     } catch (error) {
       console.error('Verification email failed to send:', error);
     }
   } catch (error) {
     console.error('Signup failed:', error);
-    return { error: 'Could not create account. Is the database configured?' };
+    return { error: 'createFailed' };
   }
 
   try {
-    await signIn('credentials', { email, password, redirectTo: '/' });
+    await signIn('credentials', { email, password, redirectTo: `/${locale}/verify-email` });
     return { error: '' };
   } catch (error) {
     if (error instanceof AuthError) {
-      return { error: 'Account created, but sign-in failed. Please log in.' };
+      return { error: 'signinFailed' };
     }
     throw error;
   }
 }
 
-export async function signOutAction() {
-  await signOut({ redirectTo: '/' });
+export async function signOutAction(locale: string) {
+  const target = isLocale(locale) ? locale : 'en';
+  await signOut({ redirectTo: `/${target}/welcome` });
 }
 
 // ---------------------------------------------------------------------------
@@ -129,9 +142,13 @@ export async function verifyEmailWithToken(token: string): Promise<boolean> {
   }
 }
 
-export async function resendVerificationAction(): Promise<SimpleFormState> {
+export async function resendVerificationAction(
+  _prev: SimpleFormState | undefined,
+  formData: FormData
+): Promise<SimpleFormState> {
+  const locale = localeOf(formData);
   const userId = await requireUserId();
-  if (!userId) return { status: 'error', message: 'You must be signed in.' };
+  if (!userId) return { status: 'error', message: 'notSignedIn' };
 
   try {
     const [user] = await db
@@ -139,18 +156,18 @@ export async function resendVerificationAction(): Promise<SimpleFormState> {
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-    if (!user) return { status: 'error', message: 'Account not found.' };
-    if (user.verifiedAt) return { status: 'success', message: 'Your email is already verified.' };
+    if (!user) return { status: 'error', message: 'accountMissing' };
+    if (user.verifiedAt) return { status: 'success', message: 'alreadyVerified' };
 
     if (await isOnResendCooldown(userId, 'email_verify')) {
-      return { status: 'error', message: 'A link was just sent — check your inbox, or try again in a minute.' };
+      return { status: 'error', message: 'justSent' };
     }
 
-    await sendVerificationLink(userId, user.email);
-    return { status: 'success', message: `Verification link sent to ${user.email}.` };
+    await sendVerificationLink(userId, user.email, locale);
+    return { status: 'success', message: 'sent' };
   } catch (error) {
     console.error('resendVerificationAction failed:', error);
-    return { status: 'error', message: 'Could not send the email. Please try again.' };
+    return { status: 'error', message: 'sendFailed' };
   }
 }
 
@@ -162,9 +179,10 @@ export async function requestPasswordResetAction(
   _prevState: SimpleFormState | undefined,
   formData: FormData
 ): Promise<SimpleFormState> {
+  const locale = localeOf(formData);
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
   if (!EMAIL_RE.test(email)) {
-    return { status: 'error', message: 'Please enter a valid email address.' };
+    return { status: 'error', message: 'invalidEmail' };
   }
 
   try {
@@ -178,38 +196,33 @@ export async function requestPasswordResetAction(
     // so this form can't be used to probe for registered emails.
     if (user && !(await isOnResendCooldown(user.id, 'password_reset'))) {
       const token = await createAuthToken(user.id, 'password_reset');
-      const link = `${await baseUrl()}/reset-password?token=${token}`;
-      await sendEmail(passwordResetEmail(email, link));
+      const link = `${await baseUrl()}/${locale}/reset-password?token=${token}`;
+      await sendEmail(passwordResetEmail(email, link, locale));
     }
   } catch (error) {
     console.error('requestPasswordResetAction failed:', error);
-    return { status: 'error', message: 'Something went wrong. Please try again.' };
+    return { status: 'error', message: 'sendFailed' };
   }
 
-  return {
-    status: 'success',
-    message: `If an account exists for ${email}, a reset link is on its way. It expires in 1 hour.`,
-  };
+  return { status: 'success', message: 'resetSent' };
 }
 
 export async function resetPasswordAction(
   _prevState: SimpleFormState | undefined,
   formData: FormData
 ): Promise<SimpleFormState> {
+  const locale = localeOf(formData);
   const token = String(formData.get('token') ?? '');
   const password = String(formData.get('password') ?? '');
   const confirm = String(formData.get('confirm') ?? '');
 
-  if (password.length < 8) return { status: 'error', message: 'Password must be at least 8 characters.' };
-  if (password !== confirm) return { status: 'error', message: 'Passwords do not match.' };
+  if (password.length < 8) return { status: 'error', message: 'passwordShort' };
+  if (password !== confirm) return { status: 'error', message: 'passwordMismatch' };
 
   try {
     const userId = await consumeAuthToken(token, 'password_reset');
     if (!userId) {
-      return {
-        status: 'error',
-        message: 'This reset link is invalid or has expired. Request a new one below.',
-      };
+      return { status: 'error', message: 'resetInvalid' };
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -220,8 +233,8 @@ export async function resetPasswordAction(
       .where(eq(users.id, userId));
   } catch (error) {
     console.error('resetPasswordAction failed:', error);
-    return { status: 'error', message: 'Could not update the password. Please try again.' };
+    return { status: 'error', message: 'saveFailed' };
   }
 
-  redirect('/login?reset=1');
+  redirect(`/${locale}/login?reset=1`);
 }

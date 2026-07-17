@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth-helpers';
 
-export const runtime = 'nodejs';
-
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 // Data-URL fallback rows live in Postgres — keep them small. The client
 // compresses to well under this before uploading.

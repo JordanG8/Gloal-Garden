@@ -20,7 +20,8 @@ function toPlantSummary(
   plant: PlantRow,
   sp: SpeciesRow,
   plantedByName: string,
-  stewardCount: number
+  stewardCount: number,
+  photo?: { latestPhotoUrl: string | null; photoCount: number }
 ): PlantSummary {
   return {
     id: plant.id,
@@ -29,6 +30,8 @@ function toPlantSummary(
     lng: plant.lng,
     category: sp.category,
     speciesName: sp.commonName,
+    speciesNameHe: sp.commonNameHe,
+    emoji: sp.emoji,
     scientificName: sp.scientificName,
     status: computeStatus(plant, sp),
     isNew:
@@ -44,6 +47,8 @@ function toPlantSummary(
     accessNotes: plant.accessNotes,
     wateringFrequencyDays: sp.wateringFrequencyDays,
     daysToHarvest: sp.daysToHarvest,
+    latestPhotoUrl: photo?.latestPhotoUrl ?? null,
+    photoCount: photo?.photoCount ?? 0,
   };
 }
 
@@ -55,6 +60,15 @@ export async function getGardenData(): Promise<GardenData> {
           plant: plants,
           species: species,
           plantedByName: users.displayName,
+          latestPhotoUrl: sql<string | null>`(
+            select o.photo_url from observations o
+            where o.plant_id = ${plants.id} and o.photo_url is not null
+            order by o.created_at desc limit 1
+          )`,
+          photoCount: sql<number>`(
+            select count(*) from observations o
+            where o.plant_id = ${plants.id} and o.photo_url is not null
+          )::int`,
         })
         .from(plants)
         .innerJoin(species, eq(plants.speciesId, species.id))
@@ -64,7 +78,9 @@ export async function getGardenData(): Promise<GardenData> {
         .select({
           id: species.id,
           commonName: species.commonName,
+          commonNameHe: species.commonNameHe,
           category: species.category,
+          emoji: species.emoji,
         })
         .from(species)
         .orderBy(species.commonName),
@@ -76,8 +92,12 @@ export async function getGardenData(): Promise<GardenData> {
 
     const stewardCountByPlant = new Map(stewardCounts.map((row) => [row.plantId, Number(row.n)]));
 
-    const mapped: PlantSummary[] = plantRows.map(({ plant, species: sp, plantedByName }) =>
-      toPlantSummary(plant, sp, plantedByName, stewardCountByPlant.get(plant.id) ?? 0)
+    const mapped: PlantSummary[] = plantRows.map(
+      ({ plant, species: sp, plantedByName, latestPhotoUrl, photoCount }) =>
+        toPlantSummary(plant, sp, plantedByName, stewardCountByPlant.get(plant.id) ?? 0, {
+          latestPhotoUrl,
+          photoCount,
+        })
     );
 
     return { plants: mapped, speciesList: speciesRows, dbReady: true };
@@ -128,6 +148,12 @@ export async function getPlantDetail(id: number): Promise<PlantDetail | null> {
           diseaseTag: observations.diseaseTag,
           createdAt: observations.createdAt,
           userName: users.displayName,
+          userId: users.id,
+          userAvatar: users.avatar,
+          points: sql<number>`coalesce((
+            select sum(k.points) from karma_events k
+            where k.observation_id = ${observations.id}
+          ), 0)::int`,
         })
         .from(observations)
         .innerJoin(users, eq(observations.userId, users.id))
@@ -138,6 +164,7 @@ export async function getPlantDetail(id: number): Promise<PlantDetail | null> {
         .select({
           id: users.id,
           name: users.displayName,
+          avatar: users.avatar,
           adoptedAt: adoptions.createdAt,
           lastActionAt: sql<string | null>`(
             select max(o.created_at) from observations o
@@ -164,6 +191,7 @@ export async function getPlantDetail(id: number): Promise<PlantDetail | null> {
     const stewards: StewardEntry[] = stewardRows.map((steward) => ({
       id: steward.id,
       name: steward.name,
+      avatar: steward.avatar,
       adoptedAt: steward.adoptedAt.toISOString(),
       active: isStewardActive({
         lastActionAt: steward.lastActionAt ? new Date(steward.lastActionAt) : null,
@@ -172,8 +200,12 @@ export async function getPlantDetail(id: number): Promise<PlantDetail | null> {
       }),
     }));
 
+    const photoLogs = logRows.filter((log) => log.photoUrl);
     return {
-      plant: toPlantSummary(plant, sp, plantedByName, stewards.length),
+      plant: toPlantSummary(plant, sp, plantedByName, stewards.length, {
+        latestPhotoUrl: photoLogs[0]?.photoUrl ?? null,
+        photoCount: photoLogs.length,
+      }),
       observations: logRows.map((log) => ({ ...log, createdAt: log.createdAt.toISOString() })),
       stewards,
       verified: verifiedRows.length > 0,

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { observations, users } from '@/db/schema';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import type { ObservationEntry } from '@/lib/types';
 
 export async function GET(
@@ -25,6 +25,12 @@ export async function GET(
         diseaseTag: observations.diseaseTag,
         createdAt: observations.createdAt,
         userName: users.displayName,
+        userId: users.id,
+        userAvatar: users.avatar,
+        points: sql<number>`coalesce((
+          select sum(k.points) from karma_events k
+          where k.observation_id = ${observations.id}
+        ), 0)::int`,
       })
       .from(observations)
       .innerJoin(users, eq(observations.userId, users.id))

@@ -1,6 +1,6 @@
 'use server';
 
-import { db } from '@/db';
+import { db, runBatch, type BatchItem } from '@/db';
 import { adoptions, karmaEvents, observations, plants, species, users } from '@/db/schema';
 import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
@@ -25,13 +25,6 @@ import {
 import type { ActionResult } from './types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-type BatchItem = Parameters<typeof db.batch>[0][number];
-
-async function runBatch(statements: BatchItem[]) {
-  if (statements.length === 0) return;
-  await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
-}
 
 async function earnedInLast24h(userId: number, now: Date): Promise<number> {
   const [row] = await db
@@ -214,7 +207,8 @@ async function awardBadges(userId: number, kinds: KarmaKind[]): Promise<string[]
     .update(users)
     .set({ badges: [...currentBadges, ...earned.map((b) => b.id)] })
     .where(eq(users.id, userId));
-  return earned.map((b) => b.name);
+  // Badge IDs, not names — the UI renders them in the viewer's language.
+  return earned.map((b) => b.id);
 }
 
 /**
@@ -285,6 +279,7 @@ export async function createPlant(input: {
   nickname: string;
   description: string;
   accessNotes: string;
+  photoUrl?: string;
 }): Promise<ActionResult> {
   const userId = await requireUserId();
   if (!userId) return { ok: false, error: 'You must be signed in to add a plant.' };
@@ -301,9 +296,19 @@ export async function createPlant(input: {
     return { ok: false, error: 'Please choose a species.' };
   }
 
+  const photoUrl = input.photoUrl?.trim() || null;
+  const validPhoto =
+    !photoUrl ||
+    /^https?:\/\//.test(photoUrl) ||
+    (/^data:image\/(jpeg|png|webp);base64,/.test(photoUrl) && photoUrl.length <= 2_100_000);
+  if (!validPhoto) {
+    return { ok: false, error: 'That photo could not be attached. Please try again.' };
+  }
+
   let pointsAwarded = 0;
   let note: string | undefined;
   let newBadges: string[] = [];
+  let totalKarma = 0;
 
   try {
     const now = new Date();
@@ -343,6 +348,17 @@ export async function createPlant(input: {
       })
       .returning({ id: plants.id });
 
+    // A founding photo verifies the plant from day one (no extra karma —
+    // it's part of the planting).
+    if (photoUrl) {
+      await db.insert(observations).values({
+        plantId: plant.id,
+        userId,
+        type: 'photo',
+        photoUrl,
+      });
+    }
+
     const award = plantNewPoints({
       earningPlantsLast24h: earningPlantsRow?.n ?? 0,
       accountCreatedAt: user.createdAt,
@@ -352,6 +368,7 @@ export async function createPlant(input: {
     });
     pointsAwarded = award.points;
     note = award.note;
+    totalKarma = user.karma + award.points;
 
     const statements: BatchItem[] = [
       db.insert(karmaEvents).values({ userId, plantId: plant.id, kind: 'plant_new', points: award.points }),
@@ -370,7 +387,20 @@ export async function createPlant(input: {
   }
 
   revalidatePath('/');
-  return { ok: true, pointsAwarded, newBadges, note };
+  return {
+    ok: true,
+    pointsAwarded,
+    newBadges,
+    note,
+    breakdown: {
+      kind: 'plant_new',
+      base: pointsAwarded,
+      communityBonus: 0,
+      rescueBonus: 0,
+      isCommunity: false,
+      totalKarma,
+    },
+  };
 }
 
 export async function logCareAction(input: {
@@ -440,7 +470,7 @@ export async function logCareAction(input: {
     if (input.type === 'resolve' && !canResolve(privilege)) {
       return {
         ok: false,
-        error: 'Resolving alerts on plants you don’t steward needs Gardener trust (250 karma). Adopt this plant to help right away.',
+        error: 'error_resolve_trust',
       };
     }
 
@@ -591,6 +621,14 @@ export async function logCareAction(input: {
       pointsAwarded: award.points + award.rescueBonus,
       newBadges,
       note: award.note,
+      breakdown: {
+        kind: award.kind,
+        base: Math.min(award.basePoints, award.points),
+        communityBonus: Math.max(0, award.points - award.basePoints),
+        rescueBonus: award.rescueBonus,
+        isCommunity: plant.plantedBy !== userId,
+        totalKarma: user.karma + award.points + award.rescueBonus,
+      },
     };
   } catch (error) {
     console.error('logCareAction failed:', error);

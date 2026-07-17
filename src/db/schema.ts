@@ -43,6 +43,7 @@ export const users = pgTable('users', {
 export const species = pgTable('species', {
   id: serial('id').primaryKey(),
   commonName: text('common_name').notNull(),
+  commonNameHe: text('common_name_he'),
   scientificName: text('scientific_name').notNull(),
   category: text('category').notNull(), // 'vegetable' | 'fruit' | 'herb' | 'tree'
   emoji: text('emoji').notNull().default('🌱'),
