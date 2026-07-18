@@ -49,7 +49,7 @@ export async function updateProfileAction(
     return { status: 'error', message: 'save' };
   }
 
-  revalidatePath('/', 'layout');
+  revalidatePath('/[locale]', 'layout');
   return { status: 'success', message: '' };
 }
 
