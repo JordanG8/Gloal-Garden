@@ -35,7 +35,7 @@ export async function GET(
       .from(observations)
       .innerJoin(users, eq(observations.userId, users.id))
       .where(eq(observations.plantId, plantId))
-      .orderBy(desc(observations.createdAt))
+      .orderBy(desc(observations.createdAt), desc(observations.id))
       .limit(50);
 
     const entries: ObservationEntry[] = rows.map((row) => ({

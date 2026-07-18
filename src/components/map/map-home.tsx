@@ -13,6 +13,10 @@ import { IconSearch, IconLocate, IconClose, IconMail } from '@/components/icons'
 import { PlantPin, pinStatus } from './plant-marker';
 import { UserLocationMarker } from './user-location-marker';
 import { PlantSheet } from './plant-sheet';
+import { ensureRtlTextPlugin } from './rtl-text';
+
+// Register Hebrew/Arabic label shaping once, before any map mounts.
+ensureRtlTextPlugin();
 
 /** iOS 13+ gates device orientation behind an explicit, gesture-triggered prompt. */
 type DeviceOrientationEventConstructorWithPermission = typeof DeviceOrientationEvent & {
@@ -29,6 +33,23 @@ function headingFromOrientationEvent(e: DeviceOrientationEvent): number | null {
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 const FALLBACK_CENTER = { lat: 32.5185, lng: 35.0047 }; // Givat Ada
+
+// Exponential smoothing factor for the compass (0 = frozen, 1 = raw/jittery).
+const HEADING_SMOOTHING = 0.4;
+
+/**
+ * Fold a fresh 0–360 compass reading into a *continuous* heading. Instead of
+ * clamping back into [0,360) — which makes 359°→1° look like a 358° jump
+ * backwards and sends the CSS-rotated cone spinning the long way round — we
+ * accumulate the shortest signed step onto the running value, then low-pass it
+ * to damp jitter. The result grows/shrinks monotonically as the phone turns,
+ * so `rotate()` always animates the short way.
+ */
+function nextHeading(prev: number | null, prevRaw: number | null, raw: number): number {
+  if (prev === null || prevRaw === null) return raw;
+  const step = ((raw - prevRaw + 540) % 360) - 180; // shortest turn, −180..180
+  return prev + step * HEADING_SMOOTHING;
+}
 
 type FilterKey = 'all' | 'water' | 'harvest' | 'steward' | 'trouble';
 
@@ -70,6 +91,12 @@ export function MapHome({
   const [locateError, setLocateError] = useState('');
   const watchIdRef = useRef<number | null>(null);
   const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+  // Continuous (unwrapped) heading + the last raw reading it was derived from,
+  // plus a latch so we ignore the relative `deviceorientation` stream once an
+  // absolute source is available (mixing the two conventions amplifies jitter).
+  const headingRef = useRef<number | null>(null);
+  const rawHeadingRef = useRef<number | null>(null);
+  const absoluteHeadingRef = useRef(false);
 
   function stopTracking() {
     if (watchIdRef.current !== null) {
@@ -81,6 +108,9 @@ export function MapHome({
       window.removeEventListener('deviceorientation', orientationHandlerRef.current as EventListener);
       orientationHandlerRef.current = null;
     }
+    headingRef.current = null;
+    rawHeadingRef.current = null;
+    absoluteHeadingRef.current = false;
     setTracking(false);
     setHeading(null);
   }
@@ -89,8 +119,22 @@ export function MapHome({
 
   async function startTracking() {
     const handleOrientation = (e: DeviceOrientationEvent) => {
-      const next = headingFromOrientationEvent(e);
-      if (next !== null) setHeading(next);
+      const isAbsolute =
+        e.type === 'deviceorientationabsolute' ||
+        (e as DeviceOrientationEvent & { absolute?: boolean }).absolute === true ||
+        typeof (e as DeviceOrientationEvent & { webkitCompassHeading?: number }).webkitCompassHeading ===
+          'number';
+      // Prefer an absolute (true-north) source; once one arrives, drop the
+      // relative stream so the two don't interleave and jitter the cone.
+      if (absoluteHeadingRef.current && !isAbsolute) return;
+      if (isAbsolute) absoluteHeadingRef.current = true;
+
+      const raw = headingFromOrientationEvent(e);
+      if (raw === null) return;
+      const continuous = nextHeading(headingRef.current, rawHeadingRef.current, raw);
+      headingRef.current = continuous;
+      rawHeadingRef.current = raw;
+      setHeading(continuous);
     };
     orientationHandlerRef.current = handleOrientation;
     window.addEventListener('deviceorientationabsolute', handleOrientation as EventListener);
@@ -338,6 +382,23 @@ export function MapHome({
           </div>
         )}
       </div>
+
+      {/* Data load failed — surface it instead of leaving a silently blank map. */}
+      {!dbReady && (
+        <div className="absolute inset-x-8 top-1/2 z-10 -translate-y-1/2">
+          <div className="animate-pop flex flex-col items-center gap-3 rounded-3xl bg-white/95 p-6 text-center shadow-[0_8px_28px_rgba(32,37,28,0.15)] backdrop-blur-md">
+            <span className="text-[40px]">🌍</span>
+            <p className="text-[14px] font-semibold text-ink">{dict.map.loadError}</p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-full bg-forest px-6 py-3 text-[14px] font-semibold text-cream transition active:scale-95"
+            >
+              {dict.map.retry}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Empty garden */}
       {dbReady && plants.length === 0 && (

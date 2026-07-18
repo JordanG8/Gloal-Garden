@@ -13,6 +13,10 @@ import { POINTS } from '@/lib/karma';
 import PhotoInput from '@/components/photo-input';
 import { KarmaMoment } from '@/components/karma-moment';
 import { IconClose, IconChevronDown, IconStar, IconSearch, IconLocate } from '@/components/icons';
+import { ensureRtlTextPlugin } from '@/components/map/rtl-text';
+
+// Register Hebrew/Arabic label shaping once, before any map mounts.
+ensureRtlTextPlugin();
 
 const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 
