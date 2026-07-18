@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vendored third-party asset (MapLibre RTL text plugin) served as-is.
+    "public/**",
   ]),
 ]);
 

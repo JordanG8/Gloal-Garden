@@ -64,7 +64,7 @@ export async function getGardenData(): Promise<GardenData> {
           latestPhotoUrl: sql<string | null>`(
             select o.photo_url from observations o
             where o.plant_id = ${plants.id} and o.photo_url is not null
-            order by o.created_at desc limit 1
+            order by o.created_at desc, o.id desc limit 1
           )`,
           photoCount: sql<number>`(
             select count(*) from observations o
@@ -159,7 +159,7 @@ export async function getPlantDetail(id: number): Promise<PlantDetail | null> {
         .from(observations)
         .innerJoin(users, eq(observations.userId, users.id))
         .where(eq(observations.plantId, id))
-        .orderBy(desc(observations.createdAt))
+        .orderBy(desc(observations.createdAt), desc(observations.id))
         .limit(100),
       db
         .select({

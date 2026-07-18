@@ -105,6 +105,8 @@ export const en = {
     locationError: "Couldn't get your location. Check your permissions and try again.",
     noResults: 'No plants match — clear filters or plant one!',
     dbEmpty: 'The garden is empty. Be the first to plant!',
+    loadError: "Couldn't load the garden right now. Check your connection and try again.",
+    retry: 'Try again',
   },
 
   status: {
