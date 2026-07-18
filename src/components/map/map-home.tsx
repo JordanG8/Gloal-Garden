@@ -140,6 +140,36 @@ export function MapHome({
     startTracking();
   }
 
+  // Mirror Google Maps: if the visitor has already granted location access,
+  // drop their "you are here" dot automatically on load instead of waiting for
+  // a tap. First-time visitors are never force-prompted here — they still opt
+  // in via the locate button — and a failed silent lookup stays quiet.
+  useEffect(() => {
+    if (!navigator.geolocation || !navigator.permissions?.query || watchIdRef.current !== null) return;
+    let cancelled = false;
+    navigator.permissions
+      .query({ name: 'geolocation' as PermissionName })
+      .then((status) => {
+        if (cancelled || status.state !== 'granted' || watchIdRef.current !== null) return;
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            if (cancelled) return;
+            const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+            setMyLocation(loc);
+            mapRef.current?.flyTo({ center: [loc.lng, loc.lat], zoom: 16, duration: 1200 });
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 8000 }
+        );
+        startTracking();
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const center = useMemo(() => {
     if (plants.length === 0) return FALLBACK_CENTER;
     const lat = plants.reduce((sum, p) => sum + p.lat, 0) / plants.length;
