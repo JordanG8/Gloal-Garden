@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getPlantDetail, getViewerAdoptedPlantIds } from '@/lib/data';
@@ -12,10 +13,44 @@ import { Avatar } from '@/components/avatar';
 import { PlantImage } from '@/components/plant-art';
 import { ViewT } from '@/components/vt';
 import { AdoptButton } from '@/components/plant/adopt-button';
+import { FeedPhoto } from '@/components/feed-photo';
 import { BackButton } from '@/components/plant/back-button';
 import { pinStatus } from '@/lib/plant-status';
 import { IconPin, IconCamera, IconDropFilled, IconBasketFilled, IconAlert, IconCheck, IconForward } from '@/components/icons';
 import type { ObservationEntry } from '@/lib/types';
+
+/** Per-plant titles and share previews (OG/Twitter) using the latest photo. */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string; id: string }>;
+}): Promise<Metadata> {
+  const { locale: rawLocale, id: rawId } = await params;
+  const locale: Locale = isLocale(rawLocale) ? rawLocale : 'en';
+  const id = parseInt(rawId, 10);
+  if (!Number.isFinite(id)) return {};
+  const detail = await getPlantDetail(id);
+  if (!detail) return {};
+
+  const { plant } = detail;
+  const dict = getDict(locale);
+  const description =
+    plant.description ||
+    `${speciesDisplayName(plant, locale)} · ${fill(dict.sheet.plantedBy, { name: plant.plantedByName })}`;
+  // Inline data-URL photos (no blob storage configured) can't be OG images.
+  const photo =
+    plant.latestPhotoUrl && /^https?:\/\//.test(plant.latestPhotoUrl) ? plant.latestPhotoUrl : null;
+
+  return {
+    title: plant.name,
+    description,
+    openGraph: {
+      title: plant.name,
+      description,
+      ...(photo ? { images: [photo] } : {}),
+    },
+  };
+}
 
 function FeedLine({ entry, dict, locale }: { entry: ObservationEntry; dict: Dictionary; locale: Locale }) {
   const icons: Record<string, React.ReactNode> = {
@@ -44,18 +79,21 @@ function FeedLine({ entry, dict, locale }: { entry: ObservationEntry; dict: Dict
           {entry.harvestQuantity && (
             <strong className="text-gold-deep"> · {entry.harvestQuantity}</strong>
           )}
+          {entry.diseaseTag && (
+            <strong className="text-rust">
+              {' '}
+              · {dict.care.issueTags[entry.diseaseTag as keyof typeof dict.care.issueTags] ?? entry.diseaseTag}
+            </strong>
+          )}
         </span>
         {entry.caption && <span className="truncate text-[12px] text-muted-foreground">“{entry.caption}”</span>}
         <span className="text-[11px] text-faint">{timeAgo(entry.createdAt, locale)}</span>
       </div>
       {entry.photoUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
+        <FeedPhoto
           src={entry.photoUrl}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="h-11 w-11 shrink-0 rounded-[10px] object-cover"
+          alt={entry.userName}
+          className="h-11 w-11 rounded-[10px] object-cover"
         />
       ) : (
         <KarmaChip points={entry.points} />

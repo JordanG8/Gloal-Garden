@@ -232,6 +232,8 @@ export function MapHome({
         plant.name.toLowerCase().includes(q) ||
         plant.speciesName.toLowerCase().includes(q) ||
         (plant.speciesNameHe ?? '').includes(query.trim()) ||
+        plant.scientificName.toLowerCase().includes(q) ||
+        (plant.customSpeciesName ?? '').toLowerCase().includes(q) ||
         plant.plantedByName.toLowerCase().includes(q)
       );
     });

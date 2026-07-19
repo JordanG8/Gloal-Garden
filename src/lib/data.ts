@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { db } from '@/db';
 import { adoptions, observations, plants, species, users } from '@/db/schema';
 import { and, count, desc, eq, isNotNull, ne, sql } from 'drizzle-orm';
@@ -129,7 +130,8 @@ export interface PlantDetail {
   verified: boolean;
 }
 
-export async function getPlantDetail(id: number): Promise<PlantDetail | null> {
+// cache() dedupes the per-request double call from generateMetadata + the page.
+export const getPlantDetail = cache(async (id: number): Promise<PlantDetail | null> => {
   try {
     const [rows, logRows, stewardRows, verifiedRows] = await Promise.all([
       db
@@ -215,4 +217,4 @@ export async function getPlantDetail(id: number): Promise<PlantDetail | null> {
     console.error('Failed to load plant detail:', error);
     return null;
   }
-}
+});

@@ -38,6 +38,7 @@ export function CareFlow({
   const [type, setType] = useState<CareType>(validInitial);
   const [caption, setCaption] = useState('');
   const [quantity, setQuantity] = useState('');
+  const [issueTag, setIssueTag] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [error, setError] = useState('');
   const [pending, startTransition] = useTransition();
@@ -114,6 +115,7 @@ export function CareFlow({
         caption: caption || undefined,
         photoUrl: photoUrl || undefined,
         harvestQuantity: type === 'harvest' ? quantity || undefined : undefined,
+        diseaseTag: type === 'report' ? issueTag || undefined : undefined,
       });
       if (result.ok) {
         setDone(result);
@@ -193,6 +195,33 @@ export function CareFlow({
           );
         })}
       </div>
+
+      {/* Issue tag */}
+      {type === 'report' && (
+        <div className="animate-rise mt-4 flex flex-col gap-2">
+          <span className="microlabel text-bark">{dict.care.issueTag}</span>
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(dict.care.issueTags) as (keyof typeof dict.care.issueTags)[]).map((tag) => {
+              const active = issueTag === tag;
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => setIssueTag(active ? '' : tag)}
+                  aria-pressed={active}
+                  className={`rounded-full px-3.5 py-2 text-[12.5px] font-semibold transition active:scale-95 ${
+                    active
+                      ? 'bg-rust text-white shadow-[0_2px_8px_rgba(140,58,33,0.3)]'
+                      : 'border border-line bg-card text-ink hover:border-rust'
+                  }`}
+                >
+                  {dict.care.issueTags[tag]}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Photo */}
       <div className="mt-4">

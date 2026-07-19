@@ -26,7 +26,7 @@ export function TabBar() {
     <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-40">
       <div className="pointer-events-auto mx-auto w-full max-w-[520px] border-t border-line bg-white/95 px-6 pb-[max(env(safe-area-inset-bottom),14px)] pt-2.5 backdrop-blur-xl">
         <div className="flex items-end justify-between">
-          {tabs.map((tab, i) => {
+          {tabs.map((tab) => {
             if (!tab) {
               return (
                 <Link

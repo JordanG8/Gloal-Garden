@@ -12,13 +12,13 @@ import { LevelBar } from '@/components/stat';
 function useCountUp(target: number, duration = 900): number {
   const [value, setValue] = useState(0);
   useEffect(() => {
-    if (target <= 0) {
-      setValue(target);
-      return;
-    }
     let raf = 0;
     const start = performance.now();
     const tick = (now: number) => {
+      if (target <= 0) {
+        setValue(target);
+        return;
+      }
       const t = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
       setValue(Math.round(eased * target));

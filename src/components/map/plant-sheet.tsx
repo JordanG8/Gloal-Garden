@@ -12,6 +12,7 @@ import { daysBetween, shortDate, timeAgo } from '@/lib/format';
 import { POINTS, COMMUNITY_MULTIPLIER, WATER_DUE_FRACTION, DEFAULT_WATERING_FREQUENCY_DAYS } from '@/lib/karma';
 import { StatusPill } from '@/components/pills';
 import { PlantImage } from '@/components/plant-art';
+import { Lightbox } from '@/components/lightbox';
 import { ViewT } from '@/components/vt';
 import {
   IconDropFilled,
@@ -21,7 +22,6 @@ import {
   IconForward,
 } from '@/components/icons';
 import { pinStatus } from './plant-marker';
-import { statusLabel } from '@/components/pills';
 
 function wateringDue(plant: PlantSummary): boolean {
   const freq = plant.wateringFrequencyDays ?? DEFAULT_WATERING_FREQUENCY_DAYS;
@@ -43,10 +43,14 @@ export function PlantSheet({
 }) {
   const { dict, locale } = useI18n();
   const router = useRouter();
-  const [timeline, setTimeline] = useState<ObservationEntry[] | null>(null);
+  // Keyed by plant id so switching pins "resets" the timeline by derivation
+  // instead of a synchronous setState inside the fetch effect.
+  const [loaded, setLoaded] = useState<{ plantId: number; entries: ObservationEntry[] } | null>(null);
   const [adoptPending, startAdopt] = useTransition();
   const [adoptNote, setAdoptNote] = useState('');
   const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
   const dragStart = useRef<number | null>(null);
 
   const base = `/${locale}`;
@@ -54,11 +58,10 @@ export function PlantSheet({
 
   useEffect(() => {
     let alive = true;
-    setTimeline(null);
     fetch(`/api/plants/${plant.id}/activity`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
-        if (alive && data?.observations) setTimeline(data.observations);
+        if (alive && data?.observations) setLoaded({ plantId: plant.id, entries: data.observations });
       })
       .catch(() => {});
     return () => {
@@ -66,6 +69,7 @@ export function PlantSheet({
     };
   }, [plant.id]);
 
+  const timeline = loaded?.plantId === plant.id ? loaded.entries : null;
   const photos = (timeline ?? []).filter((o) => o.photoUrl);
   const shownPhotos = photos.slice(0, 4);
   const extraPhotos = Math.max(0, photos.length - shownPhotos.length);
@@ -95,9 +99,11 @@ export function PlantSheet({
       />
       <div
         className="animate-sheet-up absolute inset-x-0 bottom-0 z-30 flex max-h-[86%] flex-col rounded-t-[28px] bg-cream shadow-[0_-12px_40px_rgba(32,37,28,0.25)]"
-        style={{ transform: dragY > 0 ? `translateY(${dragY}px)` : undefined, transition: dragStart.current === null ? undefined : 'none' }}
+        style={{ transform: dragY > 0 ? `translateY(${dragY}px)` : undefined, transition: dragging ? 'none' : undefined }}
         onPointerDown={(e) => {
+          (e.target as Element).setPointerCapture?.(e.pointerId);
           dragStart.current = e.clientY;
+          setDragging(true);
         }}
         onPointerMove={(e) => {
           if (dragStart.current !== null) {
@@ -108,6 +114,12 @@ export function PlantSheet({
         onPointerUp={() => {
           if (dragY > 90) onClose();
           dragStart.current = null;
+          setDragging(false);
+          setDragY(0);
+        }}
+        onPointerCancel={() => {
+          dragStart.current = null;
+          setDragging(false);
           setDragY(0);
         }}
       >
@@ -196,8 +208,11 @@ export function PlantSheet({
                   .reverse()
                   .map((photo, i, arr) => (
                     <div key={photo.id} className="relative flex flex-1 flex-col items-center gap-1">
-                      <div
-                        className={`h-[52px] w-[52px] overflow-hidden rounded-xl shadow-[0_1px_4px_rgba(32,37,28,0.15)] ${
+                      <button
+                        type="button"
+                        onClick={() => setLightboxSrc(photo.photoUrl!)}
+                        aria-label={dict.sheet.photos}
+                        className={`h-[52px] w-[52px] overflow-hidden rounded-xl shadow-[0_1px_4px_rgba(32,37,28,0.15)] transition active:scale-95 ${
                           i === arr.length - 1 ? 'border-[2.5px] border-gold' : 'border-2 border-cream'
                         }`}
                       >
@@ -209,7 +224,7 @@ export function PlantSheet({
                           decoding="async"
                           className="h-full w-full object-cover"
                         />
-                      </div>
+                      </button>
                       <span className={`text-[9.5px] font-semibold ${i === arr.length - 1 ? 'text-gold-deep' : 'text-faint'}`}>
                         {shortDate(photo.createdAt, locale)}
                       </span>
@@ -303,6 +318,9 @@ export function PlantSheet({
           )}
         </div>
       </div>
+      {lightboxSrc && (
+        <Lightbox src={lightboxSrc} alt={plant.name} onClose={() => setLightboxSrc(null)} />
+      )}
     </>
   );
 }

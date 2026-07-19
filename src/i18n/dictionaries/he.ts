@@ -207,6 +207,13 @@ export const he: Dictionary = {
     harvestSub: 'מה קטפתם?',
     reportIssue: 'דיווח על בעיה',
     reportSub: 'מזיקים, נזק, מחלה',
+    issueTag: 'איזו בעיה?',
+    issueTags: {
+      pests: 'מזיקים',
+      disease: 'מחלה',
+      wilting: 'כמישה / יובש',
+      damaged: 'נזק פיזי',
+    },
     resolve: 'הבעיה טופלה',
     resolveSub: 'סימון שהכול בסדר',
     paysWhenConfirmed: 'משולם באישור',

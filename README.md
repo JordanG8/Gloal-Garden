@@ -13,7 +13,8 @@ A community map for public food plants. Drop a pin where you planted something e
 - **Stewardship**: the planter is the plant's permanent founder; anyone else can *adopt* a plant to become a steward. Stewards who stop caring decay out, and neglected plants are flagged "needs a steward" on the map
 - **Karma**: action points earned only for care that helps real food — watering plants that are actually due, photo updates, verified harvests, confirmed problem reports, rescues. Caring for *other people's* plants pays 1.5×
 - **Trust levels** (Seedling → Sprout → Gardener → Caretaker → Garden Elder) unlock privileges: higher adoption caps, resolving alerts on plants you don't steward, editing plant details
-- **Badges, public profiles** (`/users/[id]`) **and a leaderboard** (`/leaderboard`) with all-time and 7-day karma
+- **Badges, public profiles** (`/users/[id]`) **and a leaderboard** (`/ranks`) with all-time and 7-day karma
+- **Installable** as a home-screen app (web app manifest + icons); regenerate icons with `npx tsx scripts/generate-icons.ts`
 
 ## Stack
 

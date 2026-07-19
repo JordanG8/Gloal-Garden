@@ -6,7 +6,6 @@ import {
   IconDropFilled,
   IconBasketFilled,
   IconHeart,
-  IconLeafPair,
 } from '@/components/icons';
 import { pinStatus } from '@/lib/plant-status';
 import type { PlantSummary } from '@/lib/types';

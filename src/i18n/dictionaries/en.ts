@@ -205,6 +205,13 @@ export const en = {
     harvestSub: 'Log what you picked',
     reportIssue: 'Report issue',
     reportSub: 'Pests, damage, disease',
+    issueTag: 'What kind of issue?',
+    issueTags: {
+      pests: 'Pests',
+      disease: 'Disease',
+      wilting: 'Wilting / dry',
+      damaged: 'Physical damage',
+    },
     resolve: 'Mark resolved',
     resolveSub: 'The problem is fixed',
     paysWhenConfirmed: 'pays when confirmed',

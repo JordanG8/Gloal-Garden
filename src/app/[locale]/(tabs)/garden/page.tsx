@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { db } from '@/db';
-import { adoptions, plants } from '@/db/schema';
+import { adoptions } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { getGardenData } from '@/lib/data';
 import { getSessionUser } from '@/lib/auth-helpers';

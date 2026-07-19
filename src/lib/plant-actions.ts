@@ -31,6 +31,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // too in case a fresh DB hasn't run it yet).
 const CUSTOM_SPECIES_MARKER = '__custom__';
 
+// Report tags that mean the plant itself is sick (vs. damage/neglect, which
+// flags 'needs_attention' instead).
+const DISEASE_TAGS = ['pests', 'disease'];
+
 async function getOrCreateCustomSpeciesId(): Promise<number> {
   const [existing] = await db
     .select({ id: species.id })
@@ -569,7 +573,7 @@ export async function logCareAction(input: {
     const plantUpdate: Record<string, unknown> = { lastCheckedAt: now };
     if (input.type === 'water') plantUpdate.lastWateredAt = now;
     if (input.type === 'report' && canFlipStatus(privilege)) {
-      plantUpdate.status = diseaseTag ? 'diseased' : 'needs_attention';
+      plantUpdate.status = diseaseTag && DISEASE_TAGS.includes(diseaseTag) ? 'diseased' : 'needs_attention';
     }
     if (input.type === 'resolve') plantUpdate.status = 'growing';
 
