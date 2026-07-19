@@ -89,6 +89,8 @@ export function MapHome({
   const [heading, setHeading] = useState<number | null>(null);
   const [tracking, setTracking] = useState(false);
   const [locateError, setLocateError] = useState('');
+  const [tilesError, setTilesError] = useState(false);
+  const [mapKey, setMapKey] = useState(0);
   const watchIdRef = useRef<number | null>(null);
   const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
   // Continuous (unwrapped) heading + the last raw reading it was derived from,
@@ -259,12 +261,14 @@ export function MapHome({
   return (
     <div className="absolute inset-0 overflow-hidden">
       <Map
+        key={mapKey}
         ref={mapRef}
         initialViewState={{ latitude: center.lat, longitude: center.lng, zoom: 15.2 }}
         mapStyle={MAP_STYLE}
         style={{ width: '100%', height: '100%' }}
         attributionControl={false}
         onClick={() => setSelectedId(null)}
+        onError={() => setTilesError(true)}
       >
         {myLocation && (
           <Marker latitude={myLocation.lat} longitude={myLocation.lng}>
@@ -296,6 +300,21 @@ export function MapHome({
 
       {/* Top chrome */}
       <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-col gap-3 px-4 pt-[max(env(safe-area-inset-top),16px)]">
+        {tilesError && (
+          <div className="pointer-events-auto flex items-center gap-2.5 rounded-2xl border border-rust-ink/15 bg-rust-tint/95 px-4 py-2.5 shadow-[0_4px_16px_rgba(32,37,28,0.08)] backdrop-blur-sm">
+            <span className="min-w-0 flex-1 text-[12px] font-semibold text-rust-ink">{dict.map.tilesError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setTilesError(false);
+                setMapKey((k) => k + 1);
+              }}
+              className="shrink-0 rounded-full bg-rust-ink/10 px-3 py-1.5 text-[11.5px] font-bold text-rust-ink"
+            >
+              {dict.map.retry}
+            </button>
+          </div>
+        )}
         {user && user.verificationRequired && (
           <Link
             href={`/${locale}/verify-email`}
@@ -335,7 +354,7 @@ export function MapHome({
           )}
         </div>
 
-        <div className="hide-scrollbar pointer-events-auto -mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+        <div className="hide-scrollbar pointer-events-auto -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [mask-image:linear-gradient(to_right,black_92%,transparent_100%)] rtl:[mask-image:linear-gradient(to_left,black_92%,transparent_100%)]">
           {chips.map((chip) => {
             const active = filter === chip.key;
             return (
