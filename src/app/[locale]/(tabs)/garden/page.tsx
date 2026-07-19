@@ -29,7 +29,7 @@ function PlantCard({ plant, locale, dict }: { plant: PlantSummary; locale: Local
         emojiSize={26}
       />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="truncate font-display text-[18px] font-bold uppercase leading-tight text-ink">
+        <span className="line-clamp-2 font-display text-[18px] font-bold uppercase leading-tight text-ink">
           {plant.name}
         </span>
         <span className="truncate text-[12px] text-muted-foreground">

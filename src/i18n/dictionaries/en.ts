@@ -106,6 +106,7 @@ export const en = {
     noResults: 'No plants match — clear filters or plant one!',
     dbEmpty: 'The garden is empty. Be the first to plant!',
     loadError: "Couldn't load the garden right now. Check your connection and try again.",
+    tilesError: "Map tiles didn't load. Check your connection.",
     retry: 'Try again',
   },
 

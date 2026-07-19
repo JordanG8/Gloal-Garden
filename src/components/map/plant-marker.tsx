@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { STATUS_COLOR } from '@/components/pills';
@@ -33,7 +34,12 @@ function PinIcon({ status, size }: { status: string; size: number }) {
   }
 }
 
-/** Status-colored circular pin with a white ring; grows when selected. */
+/**
+ * Circular pin: the plant's latest photo when one exists (so the map reads as
+ * a photo wall of the garden), falling back to the status-colored icon pin
+ * for plants nobody has photographed yet. A small status badge always sits
+ * on top so color/state stays scannable even over a photo.
+ */
 export function PlantPin({
   plant,
   selected,
@@ -47,7 +53,9 @@ export function PlantPin({
 }) {
   const status = pinStatus(plant);
   const color = STATUS_COLOR[status] ?? STATUS_COLOR.growing;
-  const size = selected ? 46 : 34;
+  const size = selected ? 92 : 68;
+  const badgeSize = selected ? 34 : 26;
+  const hasPhoto = Boolean(plant.latestPhotoUrl);
 
   return (
     <div className="animate-marker-drop relative flex flex-col items-center" style={{ zIndex: selected ? 30 : 1 }}>
@@ -63,15 +71,33 @@ export function PlantPin({
         </div>
       )}
       <div
-        className="flex items-center justify-center rounded-full shadow-[0_4px_10px_rgba(32,37,28,0.3)] transition-all duration-200"
+        className="relative flex items-center justify-center rounded-full shadow-[0_4px_10px_rgba(32,37,28,0.3)] transition-all duration-200"
         style={{
           width: size,
           height: size,
-          background: color,
+          background: hasPhoto ? '#fff' : color,
           border: selected ? '4px solid #fff' : '3px solid #fff',
         }}
       >
-        <PinIcon status={status} size={selected ? 19 : 14} />
+        {hasPhoto ? (
+          <img
+            src={plant.latestPhotoUrl!}
+            alt=""
+            width={size}
+            height={size}
+            className="h-full w-full rounded-full object-cover"
+          />
+        ) : (
+          <PinIcon status={status} size={selected ? 38 : 28} />
+        )}
+        {hasPhoto && (
+          <div
+            className="absolute right-0 bottom-0 flex items-center justify-center rounded-full"
+            style={{ width: badgeSize, height: badgeSize, background: color, border: '2px solid #fff' }}
+          >
+            <PinIcon status={status} size={selected ? 17 : 13} />
+          </div>
+        )}
       </div>
     </div>
   );
