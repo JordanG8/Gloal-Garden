@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import { Barlow_Condensed, Instrument_Sans, Heebo, Karantina } from 'next/font/google';
+import { Barlow_Condensed, Instrument_Sans, Heebo, Rubik } from 'next/font/google';
 import { LOCALES, dirFor, isLocale, type Locale } from '@/i18n/config';
 import { getDict } from '@/i18n';
 import { I18nProvider } from '@/i18n/provider';
@@ -24,9 +24,9 @@ const heebo = Heebo({
   display: 'swap',
 });
 
-const karantina = Karantina({
-  variable: '--font-karantina',
-  weight: ['400', '700'],
+const rubik = Rubik({
+  variable: '--font-rubik',
+  weight: ['600', '700'],
   subsets: ['hebrew', 'latin'],
   display: 'swap',
 });
@@ -73,7 +73,7 @@ export default async function RootLayout({
   return (
     <html lang={locale} dir={dirFor(locale)} suppressHydrationWarning>
       <body
-        className={`${barlow.variable} ${instrument.variable} ${heebo.variable} ${karantina.variable} antialiased`}
+        className={`${barlow.variable} ${instrument.variable} ${heebo.variable} ${rubik.variable} antialiased`}
       >
         <I18nProvider locale={locale} dict={dict}>
           {children}
