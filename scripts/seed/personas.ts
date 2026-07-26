@@ -10,9 +10,9 @@ import {
   species,
   users,
   zoneMembers,
-  zones,
 } from '../../src/db/schema';
 import { eq, sql } from 'drizzle-orm';
+import bcrypt from 'bcryptjs';
 import { resolveZoneId } from '../../src/lib/zones';
 import { nextWaterDueAt } from '../../src/lib/care-schedule';
 
@@ -31,8 +31,13 @@ import { nextWaterDueAt } from '../../src/lib/care-schedule';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const daysAgo = (n: number) => new Date(Date.now() - n * DAY_MS);
 
-/** bcrypt hash of "garden123", same as the base seed's personas. */
-const PASSWORD_HASH = '$2b$10$8Kb1s6L7Z0kZ0kZ0kZ0kZuJ0kZ0kZ0kZ0kZ0kZ0kZ0kZ0kZ0kZ0k';
+/**
+ * Hashed at run time with the same cost as the base seed. It must be a real
+ * bcrypt digest — a hand-written look-alike parses but never matches, which
+ * silently makes every persona unloggable and therefore useless for the manual
+ * testing they exist to support.
+ */
+const PASSWORD = 'garden123';
 
 interface PersonaSpec {
   email: string;
@@ -160,13 +165,14 @@ const PERSONAS: PersonaSpec[] = [
 ];
 
 async function insertPersonas(): Promise<Map<string, number>> {
+  const passwordHash = await bcrypt.hash(PASSWORD, 10);
   const byEmail = new Map<string, number>();
   for (const persona of PERSONAS) {
     const [row] = await db
       .insert(users)
       .values({
         email: persona.email,
-        passwordHash: PASSWORD_HASH,
+        passwordHash,
         displayName: persona.displayName,
         bio: persona.bio,
         location: persona.location,
@@ -178,7 +184,9 @@ async function insertPersonas(): Promise<Map<string, number>> {
       // email, which matters because this is layered onto an existing seed.
       .onConflictDoUpdate({
         target: users.email,
-        set: { displayName: persona.displayName, karma: persona.karma },
+        // Re-hash on update too, so an existing persona seeded by an older run
+        // is repaired rather than left with a stale hash.
+        set: { displayName: persona.displayName, karma: persona.karma, passwordHash },
       })
       .returning({ id: users.id });
     byEmail.set(persona.email, row.id);
@@ -541,6 +549,7 @@ export async function seedPersonas() {
       `gardens ${counts.gardens}, zones ${counts.zones}, posts ${counts.posts}, ` +
       `comments ${counts.comments}, observations ${counts.observations}, karma rows ${counts.karma}.`
   );
+  console.log(`All personas sign in with the password "${PASSWORD}".`);
   console.log('What each persona is for:');
   for (const persona of PERSONAS) {
     console.log(`  ${persona.displayName.padEnd(20)} ${persona.tests}`);

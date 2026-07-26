@@ -5,6 +5,7 @@ import { db } from '@/db';
 import { gardens, gardenMembers, plants, species, users } from '@/db/schema';
 import { and, asc, desc, eq, isNull, ne, sql } from 'drizzle-orm';
 import { computeStatus } from './plant-status';
+import { needsWater } from './care-schedule';
 import { isUpForAdoption } from './karma';
 import { rethrowIfPrerenderAbort } from './prerender';
 import type { GardenKind } from './garden-kinds';
@@ -35,11 +36,15 @@ export interface GardenSummary {
 export interface Bed {
   label: string | null;
   plants: PlantSummary[];
+  /** How many of these actually want water right now — drives batch care. */
+  dueCount: number;
 }
 
 export interface GardenDetail {
   garden: GardenSummary;
   beds: Bed[];
+  /** Total due across the whole garden. */
+  dueCount: number;
   members: { id: number; name: string; avatar: string | null; role: string }[];
   viewerCanManage: boolean;
 }
@@ -190,9 +195,14 @@ export async function getGardenDetail(
         latestPhotoUrl: plant.latestPhotoUrl,
         photoCount: plant.photoCount,
       };
+      const due = needsWater(plant, sp);
       const last = beds[beds.length - 1];
-      if (last && last.label === plant.bedLabel) last.plants.push(summary);
-      else beds.push({ label: plant.bedLabel, plants: [summary] });
+      if (last && last.label === plant.bedLabel) {
+        last.plants.push(summary);
+        if (due) last.dueCount += 1;
+      } else {
+        beds.push({ label: plant.bedLabel, plants: [summary], dueCount: due ? 1 : 0 });
+      }
     }
 
     const viewerCanManage =
@@ -200,7 +210,13 @@ export async function getGardenDetail(
       (row.garden.ownerId === viewerId ||
         memberRows.some((m) => m.id === viewerId && m.role === 'keeper'));
 
-    return { garden: toSummary(row), beds, members: memberRows, viewerCanManage };
+    return {
+      garden: toSummary(row),
+      beds,
+      dueCount: beds.reduce((total, bed) => total + bed.dueCount, 0),
+      members: memberRows,
+      viewerCanManage,
+    };
   } catch (error) {
     rethrowIfPrerenderAbort(error);
     console.error('Failed to load garden detail:', error);

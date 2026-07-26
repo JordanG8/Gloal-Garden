@@ -8,6 +8,7 @@ import { getDict, fill, isLocale, type Locale, type Dictionary } from '@/i18n';
 import { PlantCard } from '@/components/plant/plant-card';
 import { Avatar } from '@/components/avatar';
 import { AssignPlants } from '@/components/garden/assign-plants';
+import { WaterBedButton } from '@/components/garden/water-bed-button';
 import { IconBack, IconLeafPair } from '@/components/icons';
 
 function plantCountLabel(n: number, dict: Dictionary): string {
@@ -20,7 +21,7 @@ async function GardenContent({ slug, locale }: { slug: string; locale: Locale })
   const detail = await getGardenDetail(slug, user?.id ?? null);
   if (!detail) notFound();
 
-  const { garden, beds, members, viewerCanManage } = detail;
+  const { garden, beds, dueCount, members, viewerCanManage } = detail;
   // Only fetched when it can actually be used, so a visitor's page view doesn't
   // pay for a query whose result is never rendered.
   const unassigned = viewerCanManage ? await getUnassignedPlants(user!.id) : [];
@@ -54,6 +55,13 @@ async function GardenContent({ slug, locale }: { slug: string; locale: Locale })
           <p className="text-[13.5px] leading-relaxed text-ink">{garden.description}</p>
         )}
       </header>
+
+      {/*
+        One tap waters everything that's actually due. Mandatory once a plot
+        has a hundred plants — nobody taps through a hundred care flows, and
+        the realistic alternative is that people stop logging entirely.
+      */}
+      {user && dueCount > 0 && <WaterBedButton gardenId={garden.id} dueCount={dueCount} />}
 
       {members.length > 1 && (
         <section className="flex flex-col gap-2">
@@ -92,7 +100,16 @@ async function GardenContent({ slug, locale }: { slug: string; locale: Locale })
               Once beds exist, the leftovers get their own honest heading.
             */}
             {(bed.label !== null || beds.length > 1) && (
-              <h2 className="microlabel text-bark">{bed.label ?? dict.gardens.unfiled}</h2>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="microlabel text-bark">{bed.label ?? dict.gardens.unfiled}</h2>
+                {user && beds.length > 1 && (
+                  <WaterBedButton
+                    gardenId={garden.id}
+                    bedLabel={bed.label}
+                    dueCount={bed.dueCount}
+                  />
+                )}
+              </div>
             )}
             <div className="stagger flex flex-col gap-2.5">
               {bed.plants.map((plant) => (

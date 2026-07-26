@@ -3,7 +3,6 @@ import { cacheLife, cacheTag } from 'next/cache';
 import { db } from '@/db';
 import { species } from '@/db/schema';
 import { asc, ne } from 'drizzle-orm';
-import { rethrowIfPrerenderAbort } from './prerender';
 
 export interface SpeciesOption {
   id: number;
@@ -54,15 +53,19 @@ export async function getSpeciesCatalog(): Promise<SpeciesOption[]> {
 
     return rows.map((row) => ({ ...row, isPerennial: row.isPerennial === 1 }));
   } catch (error) {
-    // Critical: a prerender abort must not be swallowed here. The catch would
-    // turn it into a perfectly valid-looking *empty* catalogue, and because
-    // this function is cached, that empty result would then be served for
-    // `cacheLife('days')` — a species picker that silently offers nothing.
-    // Same reasoning as the readers in data.ts.
-    rethrowIfPrerenderAbort(error);
-    // A real database failure degrades to free text, which is the behaviour
-    // the app had before the picker existed.
+    // Everything rethrows, and that is the point of this catch existing at all.
+    //
+    // The usual "degrade gracefully, return []" reflex is actively wrong inside
+    // a `use cache` boundary: a cached function that swallows an error caches
+    // the fallback. A prerender abort, or a database that happens to be down
+    // during the build, would bake an *empty* catalogue and then serve it for
+    // the whole `cacheLife('days')` window — a species picker that silently
+    // offers nothing, long after the database came back.
+    //
+    // Throwing means no cache entry is written, so the next request tries
+    // again. /add already can't render without the database (it reads the
+    // session), so this loses nothing that was working.
     console.error('Failed to load species catalog:', error);
-    return [];
+    throw error;
   }
 }

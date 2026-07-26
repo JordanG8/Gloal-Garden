@@ -89,6 +89,24 @@ export const COMMENT_SCORE_AWARDS: { kind: KarmaKind; atScore: number; points: n
   { kind: 'comment_score_10', atScore: 10, points: POINTS.commentScore10 },
 ];
 
+/**
+ * Bulk watering taper.
+ *
+ * Watering a 120-plant bed in one tap is a real chore worth real credit, but
+ * paying full price per plant would make it the cheapest karma in the app.
+ * The first few pay in full, then it decays. Applied *after* computeAward, as
+ * a separate multiplier — never inside it, because karma-check.ts asserts
+ * exact point values for the single-plant water path.
+ */
+export const BULK_WATER_FULL_PRICE = 3;
+export const BULK_WATER_HALF_PRICE = 10;
+
+export function bulkWaterMultiplier(indexInBatch: number): number {
+  if (indexInBatch < BULK_WATER_FULL_PRICE) return 1;
+  if (indexInBatch < BULK_WATER_HALF_PRICE) return 0.5;
+  return 0;
+}
+
 /** Posts per hour, per trust level index. A brand-new account gets three. */
 export const POSTS_PER_HOUR = [3, 6, 10, 15, 25];
 export const COMMENTS_PER_HOUR = [10, 20, 40, 60, 100];
