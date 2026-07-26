@@ -3,18 +3,10 @@
 
 import Link from 'next/link';
 import { useI18n } from '@/i18n/provider';
-import { STATUS_COLOR, statusLabel } from '@/components/pills';
+import { STATUS_COLOR } from '@/components/pills';
 import { PlantImage } from '@/components/plant-art';
 import { ViewT } from '@/components/vt';
-import { daysBetween, timeAgo } from '@/lib/format';
-import { plantSubtitle } from '@/lib/msg';
-import {
-  IconDropFilled,
-  IconBasketFilled,
-  IconHeart,
-  IconCamera,
-  IconForward,
-} from '@/components/icons';
+import { IconDropFilled, IconBasketFilled, IconHeart, IconForward } from '@/components/icons';
 import { pinStatus } from '@/lib/plant-status';
 import type { PlantSummary } from '@/lib/types';
 
@@ -87,74 +79,34 @@ function CollapsedPin({ plant }: { plant: PlantSummary }) {
 }
 
 /**
- * Open state: the pin itself grows into a rounded card in place — photo,
- * name, the two facts people actually act on, and a button spanning the whole
- * bottom edge through to the full plant page. Deliberately *not* a bottom
- * sheet: the plant stays where it is on the map, so tapping a pin never hides
- * the neighborhood behind a panel.
+ * Open state: the pin itself grows into a rounded card in place — the plant's
+ * photo and one button through to the full plant page, nothing else. Numbers
+ * and labels belong on that page; here they'd only crowd the map. Deliberately
+ * *not* a bottom sheet: the plant stays where it is, so tapping a pin never
+ * hides the neighborhood behind a panel.
  */
 function OpenCard({ plant, href }: { plant: PlantSummary; href: string }) {
-  const { dict, locale } = useI18n();
-  const status = pinStatus(plant);
-  const color = STATUS_COLOR[status] ?? STATUS_COLOR.growing;
-  const ageDays = daysBetween(plant.plantedAt);
+  const { dict } = useI18n();
 
   return (
     <div
       className="animate-pop flex flex-col overflow-hidden rounded-[26px] bg-white shadow-[0_16px_38px_rgba(32,37,28,0.34)] ring-[3px] ring-white"
       style={{ width: CARD_WIDTH }}
     >
-      <div className="relative">
-        <ViewT name={`plant-hero-${plant.id}`}>
-          <PlantImage
-            photoUrl={plant.latestPhotoUrl}
-            category={plant.category}
-            emoji={plant.emoji}
-            alt={plant.name}
-            className="h-[112px] w-full"
-            emojiSize={30}
-          />
-        </ViewT>
-        <span
-          className="absolute start-2 top-2 inline-flex max-w-[calc(100%-16px)] items-center rounded-full px-2 py-[3px] text-[9px] font-bold uppercase tracking-[0.08em] text-white shadow-[0_2px_6px_rgba(32,37,28,0.3)]"
-          style={{ background: color }}
-        >
-          <span className="truncate">{statusLabel(status, dict)}</span>
-        </span>
-        {plant.photoCount > 0 && (
-          <span className="absolute bottom-2 end-2 inline-flex items-center gap-1 rounded-full bg-ink/70 px-2 py-[3px] text-[9.5px] font-bold text-cream backdrop-blur-sm">
-            <IconCamera size={10} />
-            {plant.photoCount}
-          </span>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-1 px-3 pt-2 pb-2.5">
-        <span className="line-clamp-2 font-display text-[17px] font-bold uppercase leading-[1.05] text-ink">
-          {plant.name}
-        </span>
-        <span className="truncate text-[10.5px] leading-tight text-muted-foreground">
-          {plantSubtitle(plant, locale, dict)}
-        </span>
-        <div className="mt-0.5 flex flex-col gap-0.5 text-[10px] leading-tight">
-          <span className="flex items-baseline justify-between gap-1.5">
-            <span className="text-faint">{dict.plantCard.age}</span>
-            <strong className="text-ink">
-              {ageDays} {dict.plantCard.days}
-            </strong>
-          </span>
-          <span className="flex items-baseline justify-between gap-1.5">
-            <span className="shrink-0 text-faint">{dict.plantCard.lastWatered}</span>
-            <strong className="truncate text-ink">
-              {plant.lastWateredAt ? timeAgo(plant.lastWateredAt, locale) : dict.plantCard.never}
-            </strong>
-          </span>
-        </div>
-      </div>
+      <ViewT name={`plant-hero-${plant.id}`}>
+        <PlantImage
+          photoUrl={plant.latestPhotoUrl}
+          category={plant.category}
+          emoji={plant.emoji}
+          alt={plant.name}
+          className="h-[170px] w-full"
+          emojiSize={44}
+        />
+      </ViewT>
 
       <Link
         href={href}
-        className="flex items-center justify-center gap-1 bg-forest py-3 text-[11.5px] font-bold text-cream transition active:brightness-110"
+        className="flex items-center justify-center gap-1 bg-forest py-3.5 text-[12px] font-bold text-cream transition active:brightness-110"
       >
         {dict.map.fullPlantPage}
         <IconForward size={11} />

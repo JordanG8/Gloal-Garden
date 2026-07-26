@@ -442,11 +442,12 @@ export function MapHome({
         onClick={locateMe}
         aria-label={tracking ? dict.map.liveLocationOn : dict.map.locateMe}
         aria-pressed={tracking}
-        className={`absolute bottom-[132px] end-4 z-10 flex h-[50px] w-[50px] items-center justify-center rounded-full shadow-[0_6px_18px_rgba(32,37,28,0.18)] transition active:scale-95 ${
+        className={`absolute bottom-[132px] end-4 z-10 flex items-center gap-2 rounded-full py-3 ps-3.5 pe-[18px] shadow-[0_6px_18px_rgba(32,37,28,0.18)] transition active:scale-95 ${
           tracking ? 'bg-water text-white' : 'bg-white text-forest'
         }`}
       >
-        <IconLocate size={21} className="rtl:-scale-x-100" />
+        <IconLocate size={19} />
+        <span className="text-[13px] font-semibold whitespace-nowrap">{dict.map.myLocation}</span>
       </button>
 
       {locateError && (

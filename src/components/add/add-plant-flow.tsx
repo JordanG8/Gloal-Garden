@@ -32,7 +32,6 @@ export function AddPlantFlow({
   const mapRef = useRef<MapRef>(null);
   const [plantName, setPlantName] = useState('');
   const [nickname, setNickname] = useState('');
-  const [accessNotes, setAccessNotes] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [spot, setSpot] = useState(center);
   const [locating, setLocating] = useState(false);
@@ -53,7 +52,6 @@ export function AddPlantFlow({
         lng: spot.lng,
         nickname,
         description: '',
-        accessNotes,
         photoUrl: photoUrl || undefined,
       });
       if (res.ok) {
@@ -141,14 +139,14 @@ export function AddPlantFlow({
               { enableHighAccuracy: true, timeout: 8000 }
             );
           }}
-          aria-label={dict.add.useMyLocation}
-          className="absolute end-2.5 top-2.5 flex h-9 w-9 items-center justify-center rounded-full bg-white text-forest shadow-[0_2px_10px_rgba(32,37,28,0.18)] disabled:opacity-60"
+          className="absolute end-2.5 top-2.5 flex items-center gap-1.5 rounded-full bg-white py-2 ps-2.5 pe-3.5 text-forest shadow-[0_2px_10px_rgba(32,37,28,0.18)] disabled:opacity-60"
         >
           {locating ? (
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-forest border-t-transparent" />
           ) : (
-            <IconLocate size={16} className="rtl:-scale-x-100" />
+            <IconLocate size={16} />
           )}
+          <span className="text-[12px] font-semibold whitespace-nowrap">{dict.add.useMyLocation}</span>
         </button>
         <div className="pointer-events-none absolute inset-x-0 bottom-2 text-center text-[11.5px] font-semibold text-muted-foreground">
           {dict.add.dragMap}
@@ -175,17 +173,6 @@ export function AddPlantFlow({
             onChange={(e) => setNickname(e.target.value)}
             placeholder={dict.add.nicknamePlaceholder}
             maxLength={80}
-            className="w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-faint"
-          />
-        </label>
-
-        <label className="flex flex-col gap-0.5 rounded-2xl border border-line bg-card px-[18px] py-3.5 transition-all focus-within:border-forest focus-within:shadow-[0_0_0_3px_rgba(23,64,43,.08)]">
-          <span className="microlabel text-bark">{dict.add.accessNotes}</span>
-          <input
-            value={accessNotes}
-            onChange={(e) => setAccessNotes(e.target.value)}
-            placeholder={dict.add.accessPlaceholder}
-            maxLength={300}
             className="w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-faint"
           />
         </label>

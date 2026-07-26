@@ -101,6 +101,7 @@ export const en = {
     steward: 'Steward',
     trouble: 'Trouble',
     locateMe: 'Center on my location',
+    myLocation: 'My location',
     liveLocationOn: 'Live location on — tap to stop',
     locationError: "Couldn't get your location. Check your permissions and try again.",
     noResults: 'No plants match — clear filters or plant one!',
@@ -125,10 +126,6 @@ export const en = {
   },
 
   plantCard: {
-    age: 'Age',
-    days: 'days',
-    lastWatered: 'Last watered',
-    never: 'never',
     photos: 'photos',
     plantedBy: 'planted by {name}',
   },
@@ -138,8 +135,6 @@ export const en = {
     dragMap: 'Drag the map to set the exact spot',
     nickname: 'Nickname',
     nicknamePlaceholder: 'Tomatoes by the mailboxes',
-    accessNotes: 'Access notes',
-    accessPlaceholder: 'Public strip, hose at building 4',
     photoLabel: 'Add a photo — verifies the plant',
     karmaInfoStrong: '+{points} karma now.',
     karmaInfoRest: 'Founder bonuses arrive when the plant proves real — 30 days & care from 2+ neighbors.',

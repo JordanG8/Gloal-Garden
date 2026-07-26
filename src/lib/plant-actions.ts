@@ -309,7 +309,6 @@ export async function createPlant(input: {
   lng: number;
   nickname: string;
   description: string;
-  accessNotes: string;
   photoUrl?: string;
 }): Promise<ActionResult> {
   const userId = await requireUserId();
@@ -381,7 +380,6 @@ export async function createPlant(input: {
         plantedBy: userId,
         nickname: input.nickname.trim().slice(0, 80) || null,
         description: input.description.trim().slice(0, 500) || null,
-        accessNotes: input.accessNotes.trim().slice(0, 300) || null,
         lastWateredAt: new Date(),
       })
       .returning({ id: plants.id });

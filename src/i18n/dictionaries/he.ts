@@ -103,6 +103,7 @@ export const he: Dictionary = {
     steward: 'חונכות',
     trouble: 'בצרות',
     locateMe: 'מרכוז למיקום שלי',
+    myLocation: 'המיקום שלי',
     liveLocationOn: 'מיקום חי פעיל — הקישו לעצירה',
     locationError: 'לא הצלחנו לאתר את המיקום שלכם. בדקו את ההרשאות ונסו שוב.',
     noResults: 'אין צמחים מתאימים — נקו סינון או שתלו אחד!',
@@ -127,10 +128,6 @@ export const he: Dictionary = {
   },
 
   plantCard: {
-    age: 'גיל',
-    days: 'ימים',
-    lastWatered: 'הושקה לאחרונה',
-    never: 'אף פעם',
     photos: 'תמונות',
     plantedBy: 'נשתל על ידי {name}',
   },
@@ -140,8 +137,6 @@ export const he: Dictionary = {
     dragMap: 'גררו את המפה לנקודה המדויקת',
     nickname: 'כינוי',
     nicknamePlaceholder: 'עגבניות ליד תיבות הדואר',
-    accessNotes: 'איך מגיעים',
-    accessPlaceholder: 'רצועת גינון ציבורית, ברז בבניין 4',
     photoLabel: 'הוסיפו תמונה — היא מאמתת את הצמח',
     karmaInfoStrong: '‎+{points} קארמה עכשיו.',
     karmaInfoRest: 'בונוס מייסדים מגיע כשהצמח מוכיח את עצמו — 30 יום וטיפול משני שכנים לפחות.',
