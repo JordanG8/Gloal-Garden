@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUserId } from '@/lib/auth-helpers';
+import { inlinePhotosAllowed } from '@/lib/photo-url';
 
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 // Data-URL fallback rows live in Postgres — keep them small. The client
@@ -9,10 +10,13 @@ const MAX_INLINE_BYTES = 1.5 * 1024 * 1024;
 const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 /**
- * Photo uploads from the camera / gallery picker. Stores in Vercel Blob when
- * BLOB_READ_WRITE_TOKEN is configured; otherwise falls back to returning a
- * compact data URL that is persisted in the observation row itself, so photo
- * logging works with zero storage configuration.
+ * Photo uploads from the camera / gallery picker.
+ *
+ * Stores in Vercel Blob when BLOB_READ_WRITE_TOKEN is configured. Without it,
+ * development falls back to a compact data URL persisted in the row itself, so
+ * the app runs with zero storage configuration — but production refuses,
+ * because those rows cost ~20x Blob storage and get dragged through every feed
+ * and map query. See src/lib/photo-url.ts.
  */
 export async function POST(request: Request) {
   const userId = await requireUserId();
@@ -48,6 +52,16 @@ export async function POST(request: Request) {
         addRandomSuffix: true,
       });
       return NextResponse.json({ url: blob.url });
+    }
+
+    if (!inlinePhotosAllowed()) {
+      console.error(
+        'BLOB_READ_WRITE_TOKEN is not set. Photo storage is required in production.'
+      );
+      return NextResponse.json(
+        { error: 'Photo storage is not configured. Please try again later.' },
+        { status: 503 }
+      );
     }
 
     if (file.size > MAX_INLINE_BYTES) {

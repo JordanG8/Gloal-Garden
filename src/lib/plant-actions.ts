@@ -5,6 +5,7 @@ import { adoptions, karmaEvents, observations, plants, species, users } from '@/
 import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { emailVerificationBlocker, requireUserId } from './auth-helpers';
+import { isValidPhotoUrl } from './photo-url';
 import { computeStatus } from './plant-status';
 import {
   activityWindowDays,
@@ -329,11 +330,7 @@ export async function createPlant(input: {
   }
 
   const photoUrl = input.photoUrl?.trim() || null;
-  const validPhoto =
-    !photoUrl ||
-    /^https?:\/\//.test(photoUrl) ||
-    (/^data:image\/(jpeg|png|webp);base64,/.test(photoUrl) && photoUrl.length <= 2_100_000);
-  if (!validPhoto) {
+  if (!isValidPhotoUrl(photoUrl)) {
     return { ok: false, error: 'That photo could not be attached. Please try again.' };
   }
 
@@ -458,13 +455,9 @@ export async function logCareAction(input: {
 
   const caption = input.caption?.trim().slice(0, 500) || null;
   const photoUrl = input.photoUrl?.trim() || null;
-  // Uploads resolve to a hosted URL, or an inline data URL when no blob
-  // storage is configured (kept small by client-side compression).
-  const validPhoto =
-    !photoUrl ||
-    /^https?:\/\//.test(photoUrl) ||
-    (/^data:image\/(jpeg|png|webp);base64,/.test(photoUrl) && photoUrl.length <= 2_100_000);
-  if (!validPhoto) {
+  // Uploads resolve to a hosted URL, or — outside production only — an inline
+  // data URL when no blob storage is configured.
+  if (!isValidPhotoUrl(photoUrl)) {
     return { ok: false, error: 'That photo could not be attached. Please try again.' };
   }
 
