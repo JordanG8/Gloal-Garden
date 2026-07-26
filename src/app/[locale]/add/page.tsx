@@ -7,7 +7,7 @@ import { AddPlantFlow } from '@/components/add/add-plant-flow';
 const FALLBACK_CENTER = { lat: 32.5185, lng: 35.0047 };
 
 async function AddContent({ locale }: { locale: string }) {
-  const [user, { plants, speciesList }] = await Promise.all([getSessionUser(), getGardenData()]);
+  const [user, { plants }] = await Promise.all([getSessionUser(), getGardenData()]);
   if (!user) redirect(`/${locale}/welcome`);
 
   const center =
@@ -18,7 +18,7 @@ async function AddContent({ locale }: { locale: string }) {
         }
       : FALLBACK_CENTER;
 
-  return <AddPlantFlow speciesList={speciesList} user={user} center={center} />;
+  return <AddPlantFlow user={user} center={center} />;
 }
 
 function AddSkeleton() {

@@ -7,7 +7,7 @@ import { getGardenData } from '@/lib/data';
 import { getSessionUser } from '@/lib/auth-helpers';
 import { getDict, fill, isLocale, type Locale, type Dictionary } from '@/i18n';
 import type { PlantSummary } from '@/lib/types';
-import { speciesDisplayName } from '@/lib/msg';
+import { plantSubtitle, speciesDisplayName } from '@/lib/msg';
 import { timeAgo } from '@/lib/format';
 import { StatusPill } from '@/components/pills';
 import { PlantImage } from '@/components/plant-art';
@@ -33,12 +33,15 @@ function PlantCard({ plant, locale, dict }: { plant: PlantSummary; locale: Local
           {plant.name}
         </span>
         <span className="truncate text-[12px] text-muted-foreground">
-          {speciesDisplayName(plant, locale)}
-          {plant.lastWateredAt &&
-            ` · ${fill(dict.garden.lastCare, { time: timeAgo(plant.lastWateredAt, locale) })}`}
+          {[
+            speciesDisplayName(plant, locale) === plant.name ? null : speciesDisplayName(plant, locale),
+            plant.lastWateredAt && fill(dict.garden.lastCare, { time: timeAgo(plant.lastWateredAt, locale) }),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </span>
       </div>
-      <StatusPill status={pinStatus(plant) as never} dict={dict} className="shrink-0 scale-90" />
+      <StatusPill status={pinStatus(plant)} dict={dict} className="shrink-0 scale-90" />
     </Link>
   );
 }
@@ -128,8 +131,8 @@ async function GardenContent({ locale }: { locale: Locale }) {
                 />
                 <div className="flex min-w-0 flex-1 flex-col">
                   <span className="truncate text-[13.5px] font-bold text-ink">{plant.name}</span>
-                  <span className="text-[11.5px] text-muted-foreground">
-                    {speciesDisplayName(plant, locale)}
+                  <span className="truncate text-[11.5px] text-muted-foreground">
+                    {plantSubtitle(plant, locale, dict)}
                   </span>
                 </div>
                 <IconForward size={14} className="shrink-0 text-steward" />

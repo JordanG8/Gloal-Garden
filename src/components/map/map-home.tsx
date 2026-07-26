@@ -6,13 +6,12 @@ import Map, { Marker, type MapRef } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useI18n } from '@/i18n/provider';
 import type { PlantSummary, SessionUser } from '@/lib/types';
-import { speciesDisplayName } from '@/lib/msg';
+import { plantSubtitle } from '@/lib/msg';
 import { Avatar } from '@/components/avatar';
-import { STATUS_COLOR, statusLabel } from '@/components/pills';
+import { STATUS_COLOR } from '@/components/pills';
 import { IconSearch, IconLocate, IconClose, IconMail } from '@/components/icons';
 import { PlantPin, pinStatus } from './plant-marker';
 import { UserLocationMarker } from './user-location-marker';
-import { PlantSheet } from './plant-sheet';
 import { ensureRtlTextPlugin } from './rtl-text';
 
 // Register Hebrew/Arabic label shaping once, before any map mounts.
@@ -71,12 +70,10 @@ function matchesFilter(plant: PlantSummary, filter: FilterKey): boolean {
 export function MapHome({
   plants,
   user,
-  adoptedIds,
   dbReady,
 }: {
   plants: PlantSummary[];
   user: SessionUser | null;
-  adoptedIds: number[];
   dbReady: boolean;
 }) {
   const { dict, locale } = useI18n();
@@ -239,8 +236,6 @@ export function MapHome({
     });
   }, [plants, filter, query]);
 
-  const selected = visible.find((p) => p.id === selectedId) ?? null;
-
   const counts = useMemo(
     () => ({
       all: plants.length,
@@ -286,15 +281,16 @@ export function MapHome({
             style={{ zIndex: plant.id === selectedId ? 30 : undefined }}
             onClick={(e) => {
               e.originalEvent.stopPropagation();
+              // A tap opens the pin in place; the card's own button is the only
+              // way to leave the map.
               setSelectedId(plant.id);
-              mapRef.current?.flyTo({ center: [plant.lng, plant.lat], offset: [0, -140], duration: 700 });
+              mapRef.current?.flyTo({ center: [plant.lng, plant.lat], duration: 700 });
             }}
           >
             <PlantPin
               plant={plant}
               selected={plant.id === selectedId}
-              label={plant.name}
-              statusText={statusLabel(pinStatus(plant) as never, dict)}
+              href={`/${locale}/plants/${plant.id}`}
             />
           </Marker>
         ))}
@@ -389,14 +385,16 @@ export function MapHome({
                 onClick={() => {
                   setSelectedId(plant.id);
                   setSearchOpen(false);
-                  mapRef.current?.flyTo({ center: [plant.lng, plant.lat], zoom: 16.5, offset: [0, -140], duration: 800 });
+                  mapRef.current?.flyTo({ center: [plant.lng, plant.lat], zoom: 16.5, duration: 800 });
                 }}
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-start transition hover:bg-chip"
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: STATUS_COLOR[pinStatus(plant)] }} />
-                <span className="flex flex-col">
-                  <span className="text-[13.5px] font-semibold text-ink">{plant.name}</span>
-                  <span className="text-[11px] text-muted-foreground">{speciesDisplayName(plant, locale)}</span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[13.5px] font-semibold text-ink">{plant.name}</span>
+                  <span className="truncate text-[11px] text-muted-foreground">
+                    {plantSubtitle(plant, locale, dict)}
+                  </span>
                 </span>
               </button>
             ))}
@@ -459,14 +457,6 @@ export function MapHome({
         </div>
       )}
 
-      {selected && (
-        <PlantSheet
-          plant={selected}
-          user={user}
-          adopted={adoptedIds.includes(selected.id)}
-          onClose={() => setSelectedId(null)}
-        />
-      )}
     </div>
   );
 }

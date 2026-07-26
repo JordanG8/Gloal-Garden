@@ -110,6 +110,7 @@ export const he: Dictionary = {
     loadError: 'לא הצלחנו לטעון את הגינה כרגע. בדקו את החיבור ונסו שוב.',
     tilesError: 'מפת הרקע לא נטענה. בדקו את החיבור שלכם.',
     retry: 'נסו שוב',
+    fullPlantPage: 'לדף הצמח המלא',
   },
 
   status: {
@@ -125,36 +126,18 @@ export const he: Dictionary = {
     isNew: 'חדש',
   },
 
-  sheet: {
+  plantCard: {
     age: 'גיל',
     days: 'ימים',
     lastWatered: 'הושקה לאחרונה',
     never: 'אף פעם',
-    stewards: 'חונכים',
-    noStewards: 'אין עדיין',
     photos: 'תמונות',
-    photoVerified: 'מאומת בתמונה',
-    growthTimeline: 'ציר צמיחה',
-    seeAll: 'לכולן',
-    more: 'עוד',
-    water: 'השקיה',
-    photo: 'תמונה',
-    harvest: 'קטיף',
-    report: 'דיווח',
-    waterNowKarma: 'השקו עכשיו וקבלו ‎+{points} קארמה',
-    dueNeighbor: 'השקיה שהגיע זמנה אצל שכן · ×1.5',
-    dueOwn: 'השקיה שהגיע זמנה בצמח שלך',
-    adoptPlant: 'אימוץ הצמח',
-    fullHistory: 'להיסטוריה המלאה',
     plantedBy: 'נשתל על ידי {name}',
   },
 
   add: {
     title: 'צמח חדש',
     dragMap: 'גררו את המפה לנקודה המדויקת',
-    species: 'זן',
-    chooseSpecies: 'מה שתלתם?',
-    searchSpecies: 'חיפוש זן…',
     nickname: 'כינוי',
     nicknamePlaceholder: 'עגבניות ליד תיבות הדואר',
     accessNotes: 'איך מגיעים',
@@ -166,17 +149,9 @@ export const he: Dictionary = {
     planting: 'שותלים…',
     useMyLocation: 'המיקום שלי',
     locationError: 'לא הצלחנו לאתר את המיקום שלכם. בדקו את ההרשאות ונסו שוב.',
-    otherSpecies: 'אחר — לתת שם בעצמכם',
-    customName: 'שם הצמח',
-    customNamePlaceholder: 'מה שתלתם?',
-    customNameRequired: 'תנו שם לצמח שלכם.',
-    categories: {
-      vegetable: 'ירק',
-      fruit: 'פרי',
-      herb: 'תבלין',
-      tree: 'עץ',
-      other: 'אחר',
-    },
+    plantName: 'שם הצמח',
+    plantNamePlaceholder: 'מה שתלתם?',
+    plantNameRequired: 'תנו שם לצמח שלכם.',
   },
 
   plant: {
@@ -373,6 +348,7 @@ export const he: Dictionary = {
     error_adopt_founder: 'אתם שתלתם אותו — מייסדים הם חונכים לכל החיים.',
     error_adopt_already: 'אתם כבר חונכים את הצמח הזה.',
     error_adopt_cap: 'הגעתם לתקרת החונכויות של הדרגה שלכם. צברו קארמה להעלאתה.',
+    error_plant_name: 'תנו שם לצמח שלכם.',
   },
 
   authErrors: {

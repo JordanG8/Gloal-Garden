@@ -108,6 +108,7 @@ export const en = {
     loadError: "Couldn't load the garden right now. Check your connection and try again.",
     tilesError: "Map tiles didn't load. Check your connection.",
     retry: 'Try again',
+    fullPlantPage: 'Full plant page',
   },
 
   status: {
@@ -123,36 +124,18 @@ export const en = {
     isNew: 'New',
   },
 
-  sheet: {
+  plantCard: {
     age: 'Age',
     days: 'days',
     lastWatered: 'Last watered',
     never: 'never',
-    stewards: 'Stewards',
-    noStewards: 'none yet',
     photos: 'photos',
-    photoVerified: 'photo-verified',
-    growthTimeline: 'Growth timeline',
-    seeAll: 'See all',
-    more: 'more',
-    water: 'Water',
-    photo: 'Photo',
-    harvest: 'Harvest',
-    report: 'Report',
-    waterNowKarma: 'Water it now for +{points} karma',
-    dueNeighbor: "Due watering on a neighbor's plant · ×1.5",
-    dueOwn: 'Due watering on your plant',
-    adoptPlant: 'Adopt this plant',
-    fullHistory: 'Full history',
     plantedBy: 'planted by {name}',
   },
 
   add: {
     title: 'NEW PLANT',
     dragMap: 'Drag the map to set the exact spot',
-    species: 'Species',
-    chooseSpecies: 'Choose what you planted',
-    searchSpecies: 'Search species…',
     nickname: 'Nickname',
     nicknamePlaceholder: 'Tomatoes by the mailboxes',
     accessNotes: 'Access notes',
@@ -164,17 +147,9 @@ export const en = {
     planting: 'Planting…',
     useMyLocation: 'Use my location',
     locationError: "Couldn't get your location. Check your permissions and try again.",
-    otherSpecies: 'Other — name it yourself',
-    customName: 'Plant name',
-    customNamePlaceholder: 'What did you plant?',
-    customNameRequired: 'Give your plant a name.',
-    categories: {
-      vegetable: 'Vegetable',
-      fruit: 'Fruit',
-      herb: 'Herb',
-      tree: 'Tree',
-      other: 'Other',
-    },
+    plantName: 'Plant name',
+    plantNamePlaceholder: 'What did you plant?',
+    plantNameRequired: 'Give your plant a name.',
   },
 
   plant: {
@@ -371,6 +346,7 @@ export const en = {
     error_adopt_founder: 'You planted this one — founders are stewards for life.',
     error_adopt_already: 'You already steward this plant.',
     error_adopt_cap: 'Steward cap reached for your trust level. Earn karma to raise it.',
+    error_plant_name: 'Give your plant a name.',
   },
 
   authErrors: {

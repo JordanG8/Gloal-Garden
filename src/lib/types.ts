@@ -28,14 +28,6 @@ export interface PlantSummary {
   photoCount: number;
 }
 
-export interface SpeciesOption {
-  id: number;
-  commonName: string;
-  commonNameHe: string | null;
-  category: string;
-  emoji: string;
-}
-
 export interface ObservationEntry {
   id: number;
   type: string;

@@ -16,7 +16,7 @@ export function FeedPhoto({ src, alt, className }: { src: string; alt: string; c
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label={dict.sheet.photos}
+        aria-label={dict.plantCard.photos}
         className="shrink-0 transition active:scale-95"
       >
         <img src={src} alt={alt} loading="lazy" decoding="async" className={className} />

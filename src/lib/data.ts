@@ -1,16 +1,17 @@
 import { cache } from 'react';
+import { connection } from 'next/server';
 import { db } from '@/db';
 import { adoptions, observations, plants, species, users } from '@/db/schema';
 import { and, count, desc, eq, isNotNull, ne, sql } from 'drizzle-orm';
 import { computeStatus } from './plant-status';
+import { rethrowIfPrerenderAbort } from './prerender';
 import { activityWindowDays, isStewardActive, isUpForAdoption } from './karma';
-import type { ObservationEntry, PlantSummary, SpeciesOption, StewardEntry } from './types';
+import type { ObservationEntry, PlantSummary, StewardEntry } from './types';
 
 const NEW_PLANT_WINDOW_DAYS = 14;
 
 export interface GardenData {
   plants: PlantSummary[];
-  speciesList: SpeciesOption[];
   dbReady: boolean;
 }
 
@@ -54,9 +55,19 @@ function toPlantSummary(
   };
 }
 
+/**
+ * None of the reads below are cacheable (`cacheComponents` is on), so they must
+ * never start during a prerender/prefetch pass: React aborts that render as soon
+ * as it hits a request-time API, the in-flight query rejects with
+ * HANGING_PROMISE_REJECTION, and the `catch` here would turn that into a
+ * perfectly valid-looking *empty* garden — a map with no plant pins. Awaiting
+ * `connection()` first keeps the query out of prerenders entirely, so the catch
+ * only ever fires on a real database failure.
+ */
 export async function getGardenData(): Promise<GardenData> {
+  await connection();
   try {
-    const [plantRows, speciesRows, stewardCounts] = await Promise.all([
+    const [plantRows, stewardCounts] = await Promise.all([
       db
         .select({
           plant: plants,
@@ -77,16 +88,6 @@ export async function getGardenData(): Promise<GardenData> {
         .innerJoin(users, eq(plants.plantedBy, users.id))
         .where(ne(plants.status, 'removed')),
       db
-        .select({
-          id: species.id,
-          commonName: species.commonName,
-          commonNameHe: species.commonNameHe,
-          category: species.category,
-          emoji: species.emoji,
-        })
-        .from(species)
-        .orderBy(species.commonName),
-      db
         .select({ plantId: adoptions.plantId, n: count() })
         .from(adoptions)
         .groupBy(adoptions.plantId),
@@ -102,15 +103,17 @@ export async function getGardenData(): Promise<GardenData> {
         })
     );
 
-    return { plants: mapped, speciesList: speciesRows, dbReady: true };
+    return { plants: mapped, dbReady: true };
   } catch (error) {
+    rethrowIfPrerenderAbort(error);
     console.error('Failed to load garden data (is POSTGRES_URL configured?):', error);
-    return { plants: [], speciesList: [], dbReady: false };
+    return { plants: [], dbReady: false };
   }
 }
 
 /** Plant ids the viewer stewards — lets the map panel show Adopt vs. Stop stewarding. */
 export async function getViewerAdoptedPlantIds(userId: number): Promise<number[]> {
+  await connection();
   try {
     const rows = await db
       .select({ plantId: adoptions.plantId })
@@ -118,6 +121,7 @@ export async function getViewerAdoptedPlantIds(userId: number): Promise<number[]
       .where(eq(adoptions.userId, userId));
     return rows.map((row) => row.plantId);
   } catch (error) {
+    rethrowIfPrerenderAbort(error);
     console.error('Failed to load viewer adoptions:', error);
     return [];
   }
@@ -132,6 +136,9 @@ export interface PlantDetail {
 
 // cache() dedupes the per-request double call from generateMetadata + the page.
 export const getPlantDetail = cache(async (id: number): Promise<PlantDetail | null> => {
+  // Same reason as getGardenData: without this a prerendered pass can swallow
+  // the aborted query and 404 a plant that exists.
+  await connection();
   try {
     const [rows, logRows, stewardRows, verifiedRows] = await Promise.all([
       db
@@ -214,6 +221,7 @@ export const getPlantDetail = cache(async (id: number): Promise<PlantDetail | nu
       verified: verifiedRows.length > 0,
     };
   } catch (error) {
+    rethrowIfPrerenderAbort(error);
     console.error('Failed to load plant detail:', error);
     return null;
   }

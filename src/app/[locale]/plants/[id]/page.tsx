@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import { getPlantDetail, getViewerAdoptedPlantIds } from '@/lib/data';
 import { getSessionUser } from '@/lib/auth-helpers';
 import { getDict, fill, isLocale, type Locale, type Dictionary } from '@/i18n';
-import { speciesDisplayName } from '@/lib/msg';
+import { isFreeTypedPlant, speciesDisplayName } from '@/lib/msg';
 import { daysBetween, timeAgo } from '@/lib/format';
 import { StatusPill, GlassPill, KarmaChip } from '@/components/pills';
 import { StatCardRow } from '@/components/stat';
@@ -36,7 +36,9 @@ export async function generateMetadata({
   const dict = getDict(locale);
   const description =
     plant.description ||
-    `${speciesDisplayName(plant, locale)} · ${fill(dict.sheet.plantedBy, { name: plant.plantedByName })}`;
+    [speciesDisplayName(plant, locale), fill(dict.plantCard.plantedBy, { name: plant.plantedByName })]
+      .filter(Boolean)
+      .join(' · ');
   // Inline data-URL photos (no blob storage configured) can't be OG images.
   const photo =
     plant.latestPhotoUrl && /^https?:\/\//.test(plant.latestPhotoUrl) ? plant.latestPhotoUrl : null;
@@ -109,6 +111,9 @@ async function PlantContent({ id, locale }: { id: number; locale: Locale }) {
   const adoptedIds = user ? await getViewerAdoptedPlantIds(user.id) : [];
 
   const { plant, observations, stewards, verified } = detail;
+  // Suppressed when it would just echo the H1 above it (free-typed plant, no nickname).
+  const species = speciesDisplayName(plant, locale);
+  const speciesLine = species === plant.name ? null : species;
   const ageDays = daysBetween(plant.plantedAt);
   const waterings = observations.filter((o) => o.type === 'water').length;
   const harvests = observations.filter((o) => o.type === 'harvest').length;
@@ -134,19 +139,18 @@ async function PlantContent({ id, locale }: { id: number; locale: Locale }) {
         <BackButton locale={locale} />
         <div className="absolute inset-x-5 bottom-4 flex flex-col gap-2">
           <div className="flex gap-2">
-            <StatusPill status={pinStatus(plant) as never} dict={dict} />
+            <StatusPill status={pinStatus(plant)} dict={dict} />
             {verified && <GlassPill>{dict.status.verified}</GlassPill>}
           </div>
           <h1 className="font-display text-[40px] font-bold uppercase leading-[0.98] text-cream">{plant.name}</h1>
           <p className="text-[13px] text-cream/80">
-            {speciesDisplayName(plant, locale)}
-            {!plant.customSpeciesName && (
+            {speciesLine && <>{speciesLine} · </>}
+            {!isFreeTypedPlant(plant) && (
               <>
-                {' '}
-                · <em>{plant.scientificName}</em>
+                <em>{plant.scientificName}</em> ·{' '}
               </>
-            )}{' '}
-            · {fill(dict.sheet.plantedBy, { name: plant.plantedByName })}
+            )}
+            {fill(dict.plantCard.plantedBy, { name: plant.plantedByName })}
           </p>
         </div>
       </div>

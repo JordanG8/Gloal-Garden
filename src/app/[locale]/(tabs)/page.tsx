@@ -1,13 +1,12 @@
 import { Suspense } from 'react';
-import { getGardenData, getViewerAdoptedPlantIds } from '@/lib/data';
+import { getGardenData } from '@/lib/data';
 import { getSessionUser } from '@/lib/auth-helpers';
 import { MapHome } from '@/components/map/map-home';
 
 async function MapContent() {
   const [user, { plants, dbReady }] = await Promise.all([getSessionUser(), getGardenData()]);
-  const adoptedIds = user ? await getViewerAdoptedPlantIds(user.id) : [];
 
-  return <MapHome plants={plants} user={user} adoptedIds={adoptedIds} dbReady={dbReady} />;
+  return <MapHome plants={plants} user={user} dbReady={dbReady} />;
 }
 
 function MapSkeleton() {

@@ -303,15 +303,14 @@ async function maybePayEstablishedBonus(
 }
 
 export async function createPlant(input: {
-  speciesId: number;
+  /** What the planter typed in — free text, no species list to pick from. */
+  plantName: string;
   lat: number;
   lng: number;
   nickname: string;
   description: string;
   accessNotes: string;
   photoUrl?: string;
-  /** Free-typed name when the planter chose "Other" instead of a species. */
-  customSpeciesName?: string;
 }): Promise<ActionResult> {
   const userId = await requireUserId();
   if (!userId) return { ok: false, error: 'You must be signed in to add a plant.' };
@@ -325,9 +324,9 @@ export async function createPlant(input: {
     return { ok: false, error: 'Invalid location.' };
   }
 
-  const customSpeciesName = input.customSpeciesName?.trim().slice(0, 80) || null;
-  if (!customSpeciesName && !Number.isInteger(input.speciesId)) {
-    return { ok: false, error: 'Please choose a species.' };
+  const customSpeciesName = input.plantName.trim().slice(0, 80);
+  if (!customSpeciesName) {
+    return { ok: false, error: 'error_plant_name' };
   }
 
   const photoUrl = input.photoUrl?.trim() || null;
@@ -368,7 +367,9 @@ export async function createPlant(input: {
         ),
     ]);
 
-    const speciesId = customSpeciesName ? await getOrCreateCustomSpeciesId() : input.speciesId;
+    // Every plant now carries its own free-typed name; the FK points at the
+    // generic marker row purely so care-cadence defaults still resolve.
+    const speciesId = await getOrCreateCustomSpeciesId();
 
     const [plant] = await db
       .insert(plants)

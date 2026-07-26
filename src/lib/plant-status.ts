@@ -58,12 +58,12 @@ export function computeStatus(plant: StatusPlantInput, speciesInfo: StatusSpecie
 export function pinStatus(plant: {
   status: string;
   upForAdoption: boolean;
-}): string {
+}): PlantStatus | 'steward' {
   if (plant.status === 'needs_attention' || plant.status === 'diseased') return 'needs_attention';
   if (plant.status === 'needs_water') return 'needs_water';
   if (plant.status === 'ready_to_harvest') return 'ready_to_harvest';
   if (plant.upForAdoption) return 'steward';
-  return plant.status;
+  return plant.status as PlantStatus;
 }
 
 // Tailwind classes for the status badge shown on plant heroes (deep green
