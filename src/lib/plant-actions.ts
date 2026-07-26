@@ -6,6 +6,15 @@ import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { emailVerificationBlocker, requireUserId } from './auth-helpers';
 import { isValidPhotoUrl } from './photo-url';
+import {
+  CARE_MODES,
+  DATE_PRECISIONS,
+  nextWaterDueAt,
+  PLANT_ORIGINS,
+  type CareMode,
+  type DatePrecision,
+  type PlantOrigin,
+} from './care-schedule';
 import { computeStatus } from './plant-status';
 import {
   activityWindowDays,
@@ -303,14 +312,32 @@ async function maybePayEstablishedBonus(
   }
 }
 
+/** Full species row, so cadence and harvest windows resolve at insert time. */
+async function loadSpecies(speciesId: number) {
+  const [row] = await db.select().from(species).where(eq(species.id, speciesId)).limit(1);
+  return row ?? null;
+}
+
 export async function createPlant(input: {
-  /** What the planter typed in — free text, no species list to pick from. */
+  /** What the planter typed in — free text when nothing in the catalogue fits. */
   plantName: string;
   lat: number;
   lng: number;
   nickname: string;
   description: string;
   photoUrl?: string;
+  /** Chosen from the species catalogue, when the planter recognised it. */
+  speciesId?: number;
+  /** How it got there. Defaults to "I planted it" for backwards compatibility. */
+  origin?: string;
+  /** When it went in the ground, if known — may be decades ago. */
+  plantedAt?: string;
+  plantedAtPrecision?: string;
+  /** Whether this is yours to water at all. */
+  careMode?: string;
+  gardenId?: number | null;
+  bedLabel?: string | null;
+  quantity?: number;
 }): Promise<ActionResult> {
   const userId = await requireUserId();
   if (!userId) return { ok: false, error: 'You must be signed in to add a plant.' };
@@ -363,21 +390,72 @@ export async function createPlant(input: {
         ),
     ]);
 
-    // Every plant now carries its own free-typed name; the FK points at the
-    // generic marker row purely so care-cadence defaults still resolve.
-    const speciesId = await getOrCreateCustomSpeciesId();
+    // Prefer a real species when the planter recognised one — that's what makes
+    // seasonal watering and calendar harvest windows work. The free-typed
+    // fallback still points at the generic marker row so cadence defaults
+    // resolve to something.
+    const chosen = input.speciesId ? await loadSpecies(input.speciesId) : null;
+    const speciesId = chosen?.id ?? (await getOrCreateCustomSpeciesId());
+
+    const origin = PLANT_ORIGINS.includes(input.origin as PlantOrigin)
+      ? (input.origin as PlantOrigin)
+      : 'planted_by_me';
+    const careMode = CARE_MODES.includes(input.careMode as CareMode)
+      ? (input.careMode as CareMode)
+      : // A tree that was already there is not yours to water unless you say so.
+        origin === 'already_there' || origin === 'wild'
+        ? 'observe_only'
+        : 'scheduled';
+    const plantedAtPrecision = DATE_PRECISIONS.includes(
+      input.plantedAtPrecision as DatePrecision
+    )
+      ? (input.plantedAtPrecision as DatePrecision)
+      : 'day';
+
+    // A twenty-year-old street tree should not be recorded as planted today.
+    // Anything in the future, or before living memory, falls back to now.
+    const parsedPlantedAt = input.plantedAt ? new Date(input.plantedAt) : null;
+    const plantedAt =
+      parsedPlantedAt &&
+      !Number.isNaN(parsedPlantedAt.getTime()) &&
+      parsedPlantedAt.getTime() <= now.getTime() &&
+      parsedPlantedAt.getFullYear() >= 1900
+        ? parsedPlantedAt
+        : now;
+
+    // Only stamp "watered just now" for something you actually just planted and
+    // watered in. Claiming a mature tree was watered today suppresses its first
+    // real reminder and was the reason established plants looked cared-for.
+    const lastWateredAt = origin === 'planted_by_me' && careMode === 'scheduled' ? now : null;
+
+    const draft = {
+      careMode,
+      lastWateredAt,
+      plantedAt,
+      waterIntervalSummerDays: null,
+      waterIntervalWinterDays: null,
+    };
 
     const [plant] = await db
       .insert(plants)
       .values({
         speciesId,
-        customSpeciesName,
+        // Keep the typed name only when it isn't just an echo of the species.
+        customSpeciesName: chosen ? null : customSpeciesName,
         lat: input.lat,
         lng: input.lng,
         plantedBy: userId,
         nickname: input.nickname.trim().slice(0, 80) || null,
         description: input.description.trim().slice(0, 500) || null,
-        lastWateredAt: new Date(),
+        origin,
+        plantedAt,
+        plantedAtPrecision,
+        careMode,
+        lastWateredAt,
+        waterDueAt: nextWaterDueAt(draft, chosen ?? { wateringFrequencyDays: 7 }, now),
+        gardenId: input.gardenId ?? null,
+        bedLabel: input.bedLabel?.trim().slice(0, 40) || null,
+        quantity: Math.min(Math.max(Math.round(input.quantity ?? 1), 1), 999),
         // Denormalized so the map read doesn't need a correlated subquery per
         // plant. Kept in step with `observations` by every write path below.
         latestPhotoUrl: photoUrl,
@@ -569,7 +647,18 @@ export async function logCareAction(input: {
 
     // 2. Plant column updates + ledger rows + karma increment, atomically.
     const plantUpdate: Record<string, unknown> = { lastCheckedAt: now };
-    if (input.type === 'water') plantUpdate.lastWateredAt = now;
+    if (input.type === 'water') {
+      plantUpdate.lastWateredAt = now;
+      // Materialize the next due date rather than re-deriving it per row on
+      // every read. `plants_water_due_idx` turns "what's thirsty?" into a range
+      // scan, and the daily sweep needs it to find plants without walking the
+      // whole table. Null for anything that's never due.
+      plantUpdate.waterDueAt = nextWaterDueAt(
+        { ...plant, lastWateredAt: now },
+        sp,
+        now
+      );
+    }
     if (input.type === 'report' && canFlipStatus(privilege)) {
       plantUpdate.status = diseaseTag && DISEASE_TAGS.includes(diseaseTag) ? 'diseased' : 'needs_attention';
     }

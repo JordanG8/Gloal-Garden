@@ -368,6 +368,7 @@ export const he: Dictionary = {
   actionMsgs: {
     note_unverified_half: 'חצי נקודות — הוסיפו תמונה כדי לאמת את הצמח.',
     note_water_not_due: 'בלי נקודות — עוד לא הגיע זמן ההשקיה של הצמח.',
+    note_water_not_needed: 'אין נקודות — הצמח הזה לא בלוח השקיה.',
     note_photo_cooldown: 'בלי נקודות — כבר תיעדתם עדכון על הצמח הזה היום.',
     note_harvest_unverified: 'בלי נקודות — אמתו את הצמח בתמונה, או צרפו תמונה לקטיף.',
     note_harvest_too_young: 'בלי נקודות — הצמח צעיר מדי לקטיף אמיתי.',

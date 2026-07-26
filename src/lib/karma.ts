@@ -28,6 +28,8 @@
  *    negative moderation_adjust reversals.
  */
 
+import { expectsWatering, harvestTooYoung, wateringIntervalDays } from './care-schedule';
+
 export type CareActionType = 'water' | 'photo' | 'harvest' | 'report' | 'resolve';
 
 export type KarmaKind =
@@ -111,10 +113,19 @@ export interface AwardContext {
     lastWateredAt: Date | null;
     /** Pre-action computed status (computeStatus). */
     status: string;
+    careMode?: string | null;
+    waterIntervalSummerDays?: number | null;
+    waterIntervalWinterDays?: number | null;
   };
   species: {
     wateringFrequencyDays: number | null;
     daysToHarvest: number | null;
+    isPerennial?: number | null;
+    harvestMonthStart?: number | null;
+    harvestMonthEnd?: number | null;
+    yearsToFirstHarvest?: number | null;
+    waterIntervalSummerDays?: number | null;
+    waterIntervalWinterDays?: number | null;
   };
   /** Plant has at least one photo-bearing observation. */
   plantVerified: boolean;
@@ -161,9 +172,12 @@ function applyMultiplier(base: number, isCommunityAction: boolean): number {
 export function computeAward(ctx: AwardContext): AwardResult {
   const { now, plant, species } = ctx;
   const isCommunity = plant.plantedBy !== ctx.actorId;
-  const freq = species.wateringFrequencyDays ?? DEFAULT_WATERING_FREQUENCY_DAYS;
+  // The seasonal cadence, so "was this due?" agrees with what the map showed.
+  // Null means the plant is never due — observe_only, or a species that wants
+  // no water this season.
+  const resolvedInterval = wateringIntervalDays(plant, species, now);
+  const freq = resolvedInterval ?? species.wateringFrequencyDays ?? DEFAULT_WATERING_FREQUENCY_DAYS;
   const lastWatered = plant.lastWateredAt ?? plant.plantedAt;
-  const plantAgeDays = daysSince(plant.plantedAt, now);
 
   let kind: KarmaKind;
   let base = 0;
@@ -173,7 +187,12 @@ export function computeAward(ctx: AwardContext): AwardResult {
   switch (ctx.actionType) {
     case 'water': {
       const sinceWaterDays = daysSince(lastWatered, now);
-      if (sinceWaterDays >= WATER_DUE_FRACTION * freq) {
+      // Watering a tree that isn't yours to water is a kind thought, not a
+      // chore the garden needed doing.
+      if (resolvedInterval === null) {
+        kind = 'water_early';
+        note = 'note_water_not_needed';
+      } else if (sinceWaterDays >= WATER_DUE_FRACTION * freq) {
         kind = 'water_due';
         base = ctx.plantVerified ? POINTS.waterDue : POINTS.waterDueUnverified;
         if (!ctx.plantVerified) note = 'note_unverified_half';
@@ -206,9 +225,11 @@ export function computeAward(ctx: AwardContext): AwardResult {
       // A photo on the harvest itself is the same public evidence a
       // verification photo would be, so it counts.
       const verified = ctx.plantVerified || ctx.hasPhoto;
-      const tooYoung =
-        species.daysToHarvest !== null &&
-        plantAgeDays < HARVEST_MIN_AGE_FRACTION * species.daysToHarvest;
+      // Perennials carry no `days_to_harvest` — they fruit on a calendar
+      // window instead — so the old `daysToHarvest !== null` guard would have
+      // silently removed this gate for every tree, making a fake citrus
+      // harvest free at 38 points a pop. harvestTooYoung handles both shapes.
+      const tooYoung = harvestTooYoung(ctx.plant.plantedAt, species, now);
       const userCooldown =
         ctx.lastEarnedSameKindByUserAt !== null &&
         hoursSince(ctx.lastEarnedSameKindByUserAt, now) < HARVEST_USER_COOLDOWN_HOURS;
@@ -409,11 +430,16 @@ export function isUpForAdoption(
     plantedAt: Date;
     lastWateredAt: Date | null;
     lastCheckedAt: Date | null;
+    careMode?: string | null;
   },
   species: { wateringFrequencyDays: number | null },
   now: Date = new Date()
 ): boolean {
   if (plant.status === 'removed' || plant.status === 'dormant') return false;
+  // A tree that was never yours to water cannot be neglected by you. Without
+  // this, every mapped street citrus would advertise itself as abandoned a
+  // fortnight after being pinned.
+  if (!expectsWatering(plant.careMode)) return false;
   const lastTouch = new Date(
     Math.max(
       plant.plantedAt.getTime(),

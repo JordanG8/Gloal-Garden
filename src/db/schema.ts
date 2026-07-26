@@ -59,6 +59,18 @@ export const species = pgTable('species', {
   companionPlants: text('companion_plants'),
   careGuideMarkdown: text('care_guide_markdown'),
   heroImageUrl: text('hero_image_url'),
+  // A tree fruits on the calendar, not on a countdown from planting: a mature
+  // lemon crops every winter regardless of when it went in the ground.
+  // `days_to_harvest` stays for annuals (and because dropping a column other
+  // deployed code still reads would break a rolling deploy).
+  isPerennial: integer('is_perennial').notNull().default(0),
+  harvestMonthStart: integer('harvest_month_start'), // 1-12
+  harvestMonthEnd: integer('harvest_month_end'),     // inclusive, may wrap the year
+  yearsToFirstHarvest: integer('years_to_first_harvest'),
+  // Mediterranean climates need two cadences, not one. A winter interval of 0
+  // means "the rain handles it".
+  waterIntervalSummerDays: integer('water_interval_summer_days'),
+  waterIntervalWinterDays: integer('water_interval_winter_days'),
 });
 
 export const plants = pgTable('plants', {
@@ -89,6 +101,32 @@ export const plants = pgTable('plants', {
   // and no behaviour of its own, so a table would be a primary key wrapped
   // around a string. "Water this bed" is `where garden_id = ? and bed_label = ?`.
   bedLabel: text('bed_label'),
+
+  // How this plant came to be here. The app assumed you had just planted
+  // everything, which is wrong for most of what people will actually map:
+  // established citrus leaning over a wall into the street.
+  //   planted_by_me  you put it in the ground
+  //   already_there  it predates you — someone else's tree, or the street's
+  //   wild           self-seeded, nobody planted it
+  //   inherited      you took over an existing garden
+  origin: text('origin').notNull().default('planted_by_me'),
+  // How much `planted_at` should be trusted: 'day' | 'month' | 'year' | 'unknown'.
+  // "Sometime in the nineties" is a real answer for a mature tree.
+  plantedAtPrecision: text('planted_at_precision').notNull().default('day'),
+
+  // What kind of care this plant expects.
+  //   scheduled     you water it on a cadence
+  //   rain_fed      established; rain handles it, but flag a drought
+  //   observe_only  not yours to water — log fruit and health, nothing else
+  careMode: text('care_mode').notNull().default('scheduled'),
+  // Per-plant overrides of the species cadence, for a tree in unusual sun or
+  // a pot that dries out faster than the ground.
+  waterIntervalSummerDays: integer('water_interval_summer_days'),
+  waterIntervalWinterDays: integer('water_interval_winter_days'),
+  // Materialized on every care write so "what needs water?" is an indexed
+  // range scan rather than logic that has to be re-derived per row. Null for
+  // observe_only plants, which are never due.
+  waterDueAt: timestamp('water_due_at'),
   // Denormalized from observations. The map read used to run two correlated
   // subqueries per plant for these, which is fine at 11 plants and fatal at
   // thousands. Maintained in the same runBatch that inserts an observation.
@@ -108,6 +146,12 @@ export const plants = pgTable('plants', {
   index('plants_geo_gist_idx').using('gist', t.geo),
   // Listing a garden, and the batch-care "everything in this bed" read.
   index('plants_garden_bed_idx').on(t.gardenId, t.bedLabel),
+  // "What's thirsty?" — the daily sweep and the map's water filter. Partial,
+  // because plants nobody waters are the majority of what gets mapped and
+  // there's no reason to index them.
+  index('plants_water_due_idx')
+    .on(t.waterDueAt)
+    .where(sql`water_due_at is not null`),
 ]);
 
 /**

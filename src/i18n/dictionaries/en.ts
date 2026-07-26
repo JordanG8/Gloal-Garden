@@ -366,6 +366,7 @@ export const en = {
   actionMsgs: {
     note_unverified_half: 'Half points — add a photo to verify this plant.',
     note_water_not_due: 'No points — this plant was not due for water yet.',
+    note_water_not_needed: 'No points — this plant is not on a watering schedule.',
     note_photo_cooldown: 'No points — you already logged an update on this plant today.',
     note_harvest_unverified: 'No points — verify this plant with a photo first, or attach one to the harvest.',
     note_harvest_too_young: 'No points — this plant is too young for a real harvest.',
