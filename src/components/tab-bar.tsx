@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useI18n } from '@/i18n/provider';
-import { IconMap, IconLeafPair, IconPlus, IconTrophy, IconUser } from './icons';
+import { IconMap, IconLeafPair, IconPlus, IconGlobe, IconUser } from './icons';
 
 /**
  * Bottom navigation per the design: four labeled tabs around a raised
@@ -18,7 +18,10 @@ export function TabBar() {
     { href: base, label: dict.tabs.map, icon: IconMap, exact: true },
     { href: `${base}/garden`, label: dict.tabs.garden, icon: IconLeafPair, exact: false },
     null, // FAB slot
-    { href: `${base}/ranks`, label: dict.tabs.ranks, icon: IconTrophy, exact: false },
+    // Community replaces the global Ranks tab: four tabs plus the FAB is all
+    // that fits in a 520px shell, and the leaderboard is more useful scoped to
+    // a zone (it lives on the zone page now) than as a worldwide list.
+    { href: `${base}/community`, label: dict.tabs.community, icon: IconGlobe, exact: false },
     { href: `${base}/me`, label: dict.tabs.you, icon: IconUser, exact: false },
   ] as const;
 

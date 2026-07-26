@@ -45,7 +45,12 @@ export type KarmaKind =
   | 'plant_first_harvest'
   | 'adopt'
   | 'rescue_bonus'
-  | 'moderation_adjust';
+  | 'moderation_adjust'
+  | 'post_created'
+  | 'comment_created'
+  | 'post_score_5'
+  | 'post_score_25'
+  | 'comment_score_10';
 
 export const POINTS = {
   waterDue: 10,
@@ -61,7 +66,32 @@ export const POINTS = {
   plantFirstHarvest: 25,
   adopt: 3,
   rescueBonus: 8,
+  // Posting pays nothing at creation, for the same reason filing a report
+  // doesn't: a post nobody values shouldn't have paid. Value shows up as
+  // threshold awards below.
+  postCreated: 0,
+  commentCreated: 1,
+  postScore5: 5,
+  postScore25: 15,
+  commentScore10: 5,
 } as const;
+
+/**
+ * Score thresholds at which an author is paid, once each, forever. Never
+ * per-vote: a per-vote increment is farmable by toggling a vote off and on.
+ * Paid through the same once-per-target ledger guard as the founder bonuses.
+ */
+export const POST_SCORE_AWARDS: { kind: KarmaKind; atScore: number; points: number }[] = [
+  { kind: 'post_score_5', atScore: 5, points: POINTS.postScore5 },
+  { kind: 'post_score_25', atScore: 25, points: POINTS.postScore25 },
+];
+export const COMMENT_SCORE_AWARDS: { kind: KarmaKind; atScore: number; points: number }[] = [
+  { kind: 'comment_score_10', atScore: 10, points: POINTS.commentScore10 },
+];
+
+/** Posts per hour, per trust level index. A brand-new account gets three. */
+export const POSTS_PER_HOUR = [3, 6, 10, 15, 25];
+export const COMMENTS_PER_HOUR = [10, 20, 40, 60, 100];
 
 export const COMMUNITY_MULTIPLIER = 1.5;
 export const DAILY_CAP = 150;
@@ -319,6 +349,51 @@ export function plantNewPoints(input: {
 }
 
 /** Retroactive payout to the reporter when a different user resolves their alert. */
+/**
+ * Karma for a social action.
+ *
+ * A sibling of computeAward rather than a case inside it: AwardContext demands
+ * a plant and a species, computeAward is a total switch over CareActionType,
+ * and karma-check.ts builds a full care context in twenty assertions. Adding a
+ * 'post' branch would make every one of those carry meaningless plant data.
+ *
+ * It shares `dailyCapFor` with care actions on purpose. Give social karma its
+ * own budget and the economy inverts: an idle poster out-earns a gardener,
+ * which is exactly what this file's header exists to prevent.
+ */
+export function socialAward(input: {
+  kind: KarmaKind;
+  basePoints: number;
+  earnedLast24h: number;
+  accountCreatedAt: Date;
+  currentKarma: number;
+  now: Date;
+}): { kind: KarmaKind; points: number; note?: string } {
+  const cap = dailyCapFor(input.accountCreatedAt, input.currentKarma, input.now);
+  const remaining = Math.max(0, cap - input.earnedLast24h);
+  const points = Math.min(input.basePoints, remaining);
+  return {
+    kind: input.kind,
+    points,
+    note: points < input.basePoints ? 'note_daily_cap' : undefined,
+  };
+}
+
+/**
+ * How many posts/comments this account may write per hour.
+ *
+ * The care economy throttles by cooldown per plant; a feed needs a throttle per
+ * author, or one account can bury a small zone. Scales with the same trust
+ * ladder rather than inventing a second one.
+ */
+export function postsPerHourFor(karma: number): number {
+  return POSTS_PER_HOUR[trustLevelIndex(karma)];
+}
+
+export function commentsPerHourFor(karma: number): number {
+  return COMMENTS_PER_HOUR[trustLevelIndex(karma)];
+}
+
 export function reportConfirmedPoints(reporterId: number, plantFounderId: number): number {
   return applyMultiplier(POINTS.reportConfirmed, plantFounderId !== reporterId);
 }
@@ -359,6 +434,14 @@ export const TRUST_LEVELS: TrustLevel[] = [
   { level: 4, name: 'Garden Elder', minKarma: 1500, adoptionCap: 25 },
 ];
 
+export function trustLevelIndex(karma: number): number {
+  let index = 0;
+  for (let i = 0; i < TRUST_LEVELS.length; i += 1) {
+    if (karma >= TRUST_LEVELS[i].minKarma) index = i;
+  }
+  return index;
+}
+
 export function trustLevelFor(karma: number): TrustLevel {
   let current = TRUST_LEVELS[0];
   for (const level of TRUST_LEVELS) {
@@ -394,6 +477,15 @@ export function canEditPlant(ctx: PrivilegeContext & { isSteward: boolean }): bo
   if (ctx.isFounder) return true;
   if (ctx.isSteward && ctx.karma >= TRUST_LEVELS[2].minKarma) return true;
   return ctx.karma >= TRUST_LEVELS[3].minKarma;
+}
+
+/**
+ * Zone moderation reuses the existing trust ladder rather than a second
+ * permission system — same shape as canFlipStatus / canResolve above. An
+ * explicit zone mod always qualifies; otherwise it takes Caretaker standing.
+ */
+export function canModerateZone(ctx: { karma: number; isZoneMod: boolean }): boolean {
+  return ctx.isZoneMod || ctx.karma >= TRUST_LEVELS[3].minKarma;
 }
 
 export function canMarkRemoved(ctx: PrivilegeContext): boolean {

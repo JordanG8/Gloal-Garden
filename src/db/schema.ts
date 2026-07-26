@@ -252,6 +252,10 @@ export const karmaEvents = pgTable('karma_events', {
   userId: integer('user_id').references(() => users.id).notNull(),
   plantId: integer('plant_id').references(() => plants.id),
   observationId: integer('observation_id').references(() => observations.id),
+  // Social targets, so threshold awards can use the same once-per-target guard
+  // the founder bonuses use.
+  postId: integer('post_id').references((): AnyPgColumn => posts.id),
+  commentId: integer('comment_id').references((): AnyPgColumn => comments.id),
   kind: text('kind').notNull(),
   points: integer('points').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -265,6 +269,14 @@ export const karmaEvents = pgTable('karma_events', {
     .where(sql`${t.kind} in ('plant_established', 'plant_first_harvest')`),
   // Per-observation point totals are read for every row of every activity feed.
   index('karma_events_observation_idx').on(t.observationId),
+  // Score-threshold awards are once per post/comment, forever. Same race-proof
+  // partial unique index as the founder bonuses above.
+  uniqueIndex('karma_events_once_per_post_idx')
+    .on(t.postId, t.kind)
+    .where(sql`${t.postId} is not null`),
+  uniqueIndex('karma_events_once_per_comment_idx')
+    .on(t.commentId, t.kind)
+    .where(sql`${t.commentId} is not null`),
 ]);
 
 // Single-use, expiring tokens for email verification and password resets.
@@ -281,6 +293,157 @@ export const authTokens = pgTable('auth_tokens', {
 }, (t) => [
   index('auth_tokens_user_type_idx').on(t.userId, t.type),
 ]);
+
+/**
+ * A place, and simultaneously a community. A zone is this app's subreddit:
+ * the geographic boundary, the feed scope, and the moderation unit are the
+ * same object, because a gardening community *is* a place.
+ *
+ * Hierarchical via `parent_id` (neighbourhood → city → region). `ancestor_ids`
+ * materializes the chain so "everything in Haifa" is one indexed array
+ * containment check rather than a recursive CTE per feed read.
+ *
+ * Named zones are seeded. Anything outside one falls into a lazily-created
+ * grid cell (~5km), so a plant dropped anywhere on earth still has a
+ * community — see zones.ts.
+ */
+export const zones = pgTable('zones', {
+  id: serial('id').primaryKey(),
+  slug: text('slug').notNull().unique(),
+  name: text('name').notNull(),
+  nameHe: text('name_he'),
+  description: text('description'),
+  // 'neighborhood' | 'city' | 'region' | 'country' | 'cell'
+  kind: text('kind').notNull().default('cell'),
+  parentId: integer('parent_id').references((): AnyPgColumn => zones.id),
+  /**
+   * Self plus every ancestor, so descendant feeds are one array containment
+   * check rather than a recursive CTE. `integer[]`, not json: json has no
+   * ordering or containment operators worth using, and int[] gets a GIN index.
+   */
+  ancestorIds: integer('ancestor_ids').array().notNull().default([]),
+  lat: doublePrecision('lat').notNull(),
+  lng: doublePrecision('lng').notNull(),
+  geo: point('geo', { mode: 'xy' }).generatedAlwaysAs(sql`point(lng, lat)`),
+  /** Rough extent. Cells use the grid step; named zones get a real radius. */
+  radiusM: integer('radius_m').notNull().default(3000),
+  /** Seeded and curated, vs. auto-created from a grid cell. */
+  isOfficial: integer('is_official').notNull().default(0),
+  plantCount: integer('plant_count').notNull().default(0),
+  postCount: integer('post_count').notNull().default(0),
+  memberCount: integer('member_count').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('zones_geo_gist_idx').using('gist', t.geo),
+  index('zones_parent_idx').on(t.parentId),
+  index('zones_ancestors_idx').using('gin', t.ancestorIds),
+]);
+
+export const zoneMembers = pgTable('zone_members', {
+  zoneId: integer('zone_id').references(() => zones.id).notNull(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  role: text('role').notNull().default('member'), // 'member' | 'mod'
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.zoneId, t.userId] }),
+  index('zone_members_user_idx').on(t.userId),
+]);
+
+/**
+ * `hot_rank` is a STORED generated column rather than something a job
+ * recomputes. Reddit's formula is time-monotone, so an old post's rank never
+ * needs revisiting — only a score change does, and Postgres handles that
+ * itself. `created_at` is `timestamp` without time zone, which is what makes
+ * `extract(epoch ...)` IMMUTABLE and the generated column legal.
+ * Double precision, not real: `epoch/45000` is ~39000 today, and real's ~6
+ * significant digits would tie every post made in the same hour.
+ */
+export const posts = pgTable('posts', {
+  id: serial('id').primaryKey(),
+  zoneId: integer('zone_id').references(() => zones.id).notNull(),
+  authorId: integer('author_id').references(() => users.id).notNull(),
+  // 'question' | 'photo' | 'harvest_share' | 'trade' | 'alert' | 'event' | 'discussion'
+  kind: text('kind').notNull().default('discussion'),
+  title: text('title').notNull(),
+  body: text('body'),
+  photoUrl: text('photo_url'),
+  /** Optional anchors, so a post can point at a plant or a garden. */
+  plantId: integer('plant_id').references(() => plants.id),
+  gardenId: integer('garden_id').references((): AnyPgColumn => gardens.id),
+  score: integer('score').notNull().default(0),
+  commentCount: integer('comment_count').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  editedAt: timestamp('edited_at'),
+  deletedAt: timestamp('deleted_at'),
+  removedBy: integer('removed_by').references(() => users.id),
+}, (t) => [
+  index('posts_author_idx').on(t.authorId),
+  index('posts_zone_new_idx').on(t.zoneId, t.createdAt.desc()),
+]);
+
+/**
+ * `path` is the ancestor chain excluding self, set at insert from the parent's
+ * own path — which sidesteps the usual "the path needs an id that doesn't
+ * exist until after the insert" problem. Ordering by (path, created_at, id)
+ * gives correct tree order with siblings chronological, in one index scan.
+ * Depth is `array_length(path, 1)`; storing it too would just be a third thing
+ * to keep in sync.
+ */
+export const comments = pgTable('comments', {
+  id: serial('id').primaryKey(),
+  postId: integer('post_id').references(() => posts.id).notNull(),
+  authorId: integer('author_id').references(() => users.id).notNull(),
+  parentId: integer('parent_id').references((): AnyPgColumn => comments.id),
+  /**
+   * `integer[]`, emphatically not json: `json` has no ordering operator at all,
+   * and casting it to text to sort would order [10] before [9] — silently
+   * scrambling any thread that reaches double-digit comment ids. Integer arrays
+   * compare element-wise, numerically, which is exactly tree order.
+   */
+  path: integer('path').array().notNull().default([]),
+  body: text('body').notNull(),
+  score: integer('score').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  editedAt: timestamp('edited_at'),
+  deletedAt: timestamp('deleted_at'),
+}, (t) => [
+  index('comments_post_idx').on(t.postId, t.createdAt),
+  index('comments_path_idx').on(t.postId, t.path),
+  index('comments_author_idx').on(t.authorId),
+]);
+
+/**
+ * Votes are split per target rather than a polymorphic (target_type,
+ * target_id) table, so both sides can carry a real foreign key and cascade.
+ * `value` is +1 or -1; removing a vote deletes the row.
+ */
+export const postVotes = pgTable('post_votes', {
+  postId: integer('post_id').references(() => posts.id).notNull(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  value: integer('value').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [primaryKey({ columns: [t.postId, t.userId] })]);
+
+export const commentVotes = pgTable('comment_votes', {
+  commentId: integer('comment_id').references(() => comments.id).notNull(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  value: integer('value').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [primaryKey({ columns: [t.commentId, t.userId] })]);
+
+/** Community flags on posts and comments, resolved by zone mods. */
+export const postReports = pgTable('post_reports', {
+  id: serial('id').primaryKey(),
+  postId: integer('post_id').references(() => posts.id),
+  commentId: integer('comment_id').references(() => comments.id),
+  reporterId: integer('reporter_id').references(() => users.id).notNull(),
+  reason: text('reason').notNull(),
+  note: text('note'),
+  status: text('status').notNull().default('open'), // 'open' | 'upheld' | 'dismissed'
+  resolvedBy: integer('resolved_by').references(() => users.id),
+  resolvedAt: timestamp('resolved_at'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [index('post_reports_status_idx').on(t.status, t.createdAt)]);
 
 export const notifications = pgTable('notifications', {
   id: serial('id').primaryKey(),
