@@ -148,6 +148,14 @@ export const he: Dictionary = {
     plantName: 'שם הצמח',
     plantNamePlaceholder: 'מה שתלתם?',
     plantNameRequired: 'תנו שם לצמח שלכם.',
+    originQuestion: 'שתלתם את זה?',
+    originPlanted: 'אני שתלתי',
+    originPlantedHint: 'באחריותי להשקות',
+    originExisting: 'זה כבר היה כאן',
+    originExistingHint: 'של מישהו אחר — רק מסמנים',
+    plantedYear: 'בערך באיזו שנה? (לא חובה)',
+    plantedYearPlaceholder: 'למשל 1998',
+    speciesMatched: 'זוהה — טיפול עונתי וחודשי קטיף יחולו',
   },
 
   plant: {

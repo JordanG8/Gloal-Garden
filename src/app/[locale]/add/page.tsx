@@ -2,16 +2,23 @@ import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { getSessionUser } from '@/lib/auth-helpers';
 import { getInitialView } from '@/lib/map-view';
+import { getSpeciesCatalog } from '@/lib/species-data';
 import { AddPlantFlow } from '@/components/add/add-plant-flow';
 
 async function AddContent({ locale }: { locale: string }) {
   // Open the spot picker on the map you were just looking at. This used to
   // average every plant's coordinates, which required loading the whole table
   // and pointed at open water once the data covered more than one town.
-  const [user, view] = await Promise.all([getSessionUser(), getInitialView()]);
+  const [user, view, catalog] = await Promise.all([
+    getSessionUser(),
+    getInitialView(),
+    getSpeciesCatalog(),
+  ]);
   if (!user) redirect(`/${locale}/welcome`);
 
-  return <AddPlantFlow user={user} center={{ lat: view.lat, lng: view.lng }} />;
+  return (
+    <AddPlantFlow user={user} center={{ lat: view.lat, lng: view.lng }} catalog={catalog} />
+  );
 }
 
 function AddSkeleton() {

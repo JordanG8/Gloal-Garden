@@ -146,6 +146,14 @@ export const en = {
     plantName: 'Plant name',
     plantNamePlaceholder: 'What did you plant?',
     plantNameRequired: 'Give your plant a name.',
+    originQuestion: 'Did you plant this?',
+    originPlanted: 'I planted it',
+    originPlantedHint: "It's mine to water",
+    originExisting: 'It was already here',
+    originExistingHint: 'Someone else\'s — just mapping it',
+    plantedYear: 'Roughly what year? (optional)',
+    plantedYearPlaceholder: 'e.g. 1998',
+    speciesMatched: 'Matched — seasonal care and harvest months will apply',
   },
 
   plant: {

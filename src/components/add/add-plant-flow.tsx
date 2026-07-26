@@ -11,6 +11,8 @@ import { createPlant } from '@/lib/plant-actions';
 import { actionMsg } from '@/lib/msg';
 import { POINTS } from '@/lib/karma';
 import PhotoInput from '@/components/photo-input';
+import { SpeciesPicker } from './species-picker';
+import type { SpeciesOption } from '@/lib/species-data';
 import { KarmaMoment } from '@/components/karma-moment';
 import { IconClose, IconStar, IconLocate } from '@/components/icons';
 import { ensureRtlTextPlugin } from '@/components/map/rtl-text';
@@ -23,14 +25,19 @@ const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
 export function AddPlantFlow({
   user,
   center,
+  catalog,
 }: {
   user: SessionUser;
   center: { lat: number; lng: number };
+  catalog: SpeciesOption[];
 }) {
   const { dict, locale } = useI18n();
   const router = useRouter();
   const mapRef = useRef<MapRef>(null);
   const [plantName, setPlantName] = useState('');
+  const [speciesId, setSpeciesId] = useState<number | null>(null);
+  const [origin, setOrigin] = useState<'planted_by_me' | 'already_there'>('planted_by_me');
+  const [plantedYear, setPlantedYear] = useState('');
   const [nickname, setNickname] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [spot, setSpot] = useState(center);
@@ -46,6 +53,16 @@ export function AddPlantFlow({
     }
     setError('');
     startTransition(async () => {
+      // A year on its own is a January date with 'year' precision — honest
+      // about how well it's actually known. An implausible year is dropped
+      // rather than rejected; the pin matters more than the date.
+      const year = Number(plantedYear);
+      const knownYear =
+        origin === 'already_there' &&
+        plantedYear.length === 4 &&
+        year >= 1900 &&
+        year <= new Date().getFullYear();
+
       const res = await createPlant({
         plantName,
         lat: spot.lat,
@@ -53,6 +70,10 @@ export function AddPlantFlow({
         nickname,
         description: '',
         photoUrl: photoUrl || undefined,
+        speciesId: speciesId ?? undefined,
+        origin,
+        plantedAt: knownYear ? new Date(Date.UTC(year, 0, 1)).toISOString() : undefined,
+        plantedAtPrecision: knownYear ? 'year' : origin === 'already_there' ? 'unknown' : 'day',
       });
       if (res.ok) {
         setDoneResult(res);
@@ -155,16 +176,63 @@ export function AddPlantFlow({
 
       {/* Fields */}
       <div className="mt-4 flex flex-col gap-2.5">
-        <label className="flex flex-col gap-0.5 rounded-2xl border border-line bg-card px-[18px] py-3.5 transition-all focus-within:border-forest focus-within:shadow-[0_0_0_3px_rgba(23,64,43,.08)]">
-          <span className="microlabel text-bark">{dict.add.plantName}</span>
-          <input
-            value={plantName}
-            onChange={(e) => setPlantName(e.target.value)}
-            placeholder={dict.add.plantNamePlaceholder}
-            maxLength={80}
-            className="w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-faint"
-          />
-        </label>
+        {/*
+          Origin comes first because it changes what the rest of the form
+          means. Most of what gets mapped here will be someone else's citrus
+          leaning over a wall — not something the mapper planted, and not
+          theirs to water.
+        */}
+        <fieldset className="flex flex-col gap-2">
+          <legend className="microlabel mb-1 text-bark">{dict.add.originQuestion}</legend>
+          <div className="flex gap-2">
+            {(['planted_by_me', 'already_there'] as const).map((option) => {
+              const active = origin === option;
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setOrigin(option)}
+                  aria-pressed={active}
+                  className={`flex flex-1 flex-col gap-0.5 rounded-2xl border px-3 py-2.5 text-start transition ${
+                    active ? 'border-forest bg-moss' : 'border-line bg-card hover:border-bark'
+                  }`}
+                >
+                  <span className="text-[13px] font-bold text-ink">
+                    {option === 'planted_by_me' ? dict.add.originPlanted : dict.add.originExisting}
+                  </span>
+                  <span className="text-[10.5px] leading-tight text-muted-foreground">
+                    {option === 'planted_by_me'
+                      ? dict.add.originPlantedHint
+                      : dict.add.originExistingHint}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </fieldset>
+
+        <SpeciesPicker
+          value={{ name: plantName, speciesId }}
+          onChange={(next) => {
+            setPlantName(next.name);
+            setSpeciesId(next.speciesId);
+          }}
+          catalog={catalog}
+        />
+
+        {/* Only asked when it's a real question. If you planted it, it's today. */}
+        {origin === 'already_there' && (
+          <label className="flex flex-col gap-0.5 rounded-2xl border border-line bg-card px-[18px] py-3.5 transition-all focus-within:border-forest focus-within:shadow-[0_0_0_3px_rgba(23,64,43,.08)]">
+            <span className="microlabel text-bark">{dict.add.plantedYear}</span>
+            <input
+              value={plantedYear}
+              onChange={(e) => setPlantedYear(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              inputMode="numeric"
+              placeholder={dict.add.plantedYearPlaceholder}
+              className="w-full bg-transparent text-[16px] text-ink outline-none placeholder:text-faint"
+            />
+          </label>
+        )}
 
         <label className="flex flex-col gap-0.5 rounded-2xl border border-line bg-card px-[18px] py-3.5 transition-all focus-within:border-forest focus-within:shadow-[0_0_0_3px_rgba(23,64,43,.08)]">
           <span className="microlabel text-bark">{dict.add.nickname}</span>
