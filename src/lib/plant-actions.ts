@@ -381,6 +381,10 @@ export async function createPlant(input: {
         nickname: input.nickname.trim().slice(0, 80) || null,
         description: input.description.trim().slice(0, 500) || null,
         lastWateredAt: new Date(),
+        // Denormalized so the map read doesn't need a correlated subquery per
+        // plant. Kept in step with `observations` by every write path below.
+        latestPhotoUrl: photoUrl,
+        photoCount: photoUrl ? 1 : 0,
       })
       .returning({ id: plants.id });
 
@@ -555,6 +559,8 @@ export async function logCareAction(input: {
 
     // 1. The observation itself (needed for the ledger FK).
     const observationType = input.type === 'report' ? 'alert' : input.type;
+    const observationPhoto =
+      input.type === 'photo' || input.type === 'harvest' ? photoUrl : null;
     const [obs] = await db
       .insert(observations)
       .values({
@@ -562,7 +568,7 @@ export async function logCareAction(input: {
         userId,
         type: observationType,
         caption,
-        photoUrl: input.type === 'photo' || input.type === 'harvest' ? photoUrl : null,
+        photoUrl: observationPhoto,
         harvestQuantity: input.type === 'harvest' ? input.harvestQuantity?.trim().slice(0, 100) || null : null,
         diseaseTag: input.type === 'report' ? diseaseTag : null,
       })
@@ -575,6 +581,13 @@ export async function logCareAction(input: {
       plantUpdate.status = diseaseTag && DISEASE_TAGS.includes(diseaseTag) ? 'diseased' : 'needs_attention';
     }
     if (input.type === 'resolve') plantUpdate.status = 'growing';
+    if (observationPhoto) {
+      // Increment in SQL rather than read-modify-write: the Neon HTTP driver
+      // has no interactive transactions, so a concurrent photo would otherwise
+      // clobber this count.
+      plantUpdate.latestPhotoUrl = observationPhoto;
+      plantUpdate.photoCount = sql`${plants.photoCount} + 1`;
+    }
 
     const statements: BatchItem[] = [
       db.update(plants).set(plantUpdate).where(eq(plants.id, plant.id)),

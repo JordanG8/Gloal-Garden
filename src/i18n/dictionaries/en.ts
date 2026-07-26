@@ -105,6 +105,7 @@ export const en = {
     liveLocationOn: 'Live location on — tap to stop',
     locationError: "Couldn't get your location. Check your permissions and try again.",
     noResults: 'No plants match — clear filters or plant one!',
+    zoomForMore: 'More plants here — zoom in',
     dbEmpty: 'The garden is empty. Be the first to plant!',
     loadError: "Couldn't load the garden right now. Check your connection and try again.",
     tilesError: "Map tiles didn't load. Check your connection.",

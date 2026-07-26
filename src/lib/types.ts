@@ -3,6 +3,8 @@ import type { PlantStatus } from './plant-status';
 export interface PlantSummary {
   id: number;
   name: string;
+  /** How many physical plants this one pin stands for. 1 for a single tree. */
+  quantity: number;
   lat: number;
   lng: number;
   category: string;

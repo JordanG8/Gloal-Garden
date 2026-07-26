@@ -1,10 +1,8 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
-import { db } from '@/db';
-import { adoptions } from '@/db/schema';
-import { eq } from 'drizzle-orm';
-import { getGardenData } from '@/lib/data';
+import { getAdoptablesNear, getMyGarden } from '@/lib/data';
 import { getSessionUser } from '@/lib/auth-helpers';
+import { getInitialView } from '@/lib/map-view';
 import { getDict, fill, isLocale, type Locale, type Dictionary } from '@/i18n';
 import type { PlantSummary } from '@/lib/types';
 import { plantSubtitle, speciesDisplayName } from '@/lib/msg';
@@ -48,25 +46,18 @@ function PlantCard({ plant, locale, dict }: { plant: PlantSummary; locale: Local
 
 async function GardenContent({ locale }: { locale: Locale }) {
   const dict = getDict(locale);
-  const [user, { plants: allPlants }] = await Promise.all([getSessionUser(), getGardenData()]);
+  const user = await getSessionUser();
   if (!user) return null;
 
-  let adoptedIds: number[] = [];
-  try {
-    const rows = await db
-      .select({ plantId: adoptions.plantId })
-      .from(adoptions)
-      .where(eq(adoptions.userId, user.id));
-    adoptedIds = rows.map((r) => r.plantId);
-  } catch (error) {
-    console.error('garden adoptions failed:', error);
-  }
+  // Ask the database for this viewer's plants rather than loading every plant
+  // on earth and filtering in JS; "nearby" adoptables are now genuinely the
+  // nearest ones, ordered by the GiST KNN operator.
+  const view = await getInitialView();
+  const [{ founded, stewarding }, adoptables] = await Promise.all([
+    getMyGarden(user.id),
+    getAdoptablesNear(view, user.id),
+  ]);
 
-  const founded = allPlants.filter((p) => p.founderId === user.id);
-  const stewarding = allPlants.filter((p) => adoptedIds.includes(p.id) && p.founderId !== user.id);
-  const adoptables = allPlants
-    .filter((p) => p.upForAdoption && p.founderId !== user.id && !adoptedIds.includes(p.id))
-    .slice(0, 4);
   const empty = founded.length === 0 && stewarding.length === 0;
 
   return (
