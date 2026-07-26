@@ -17,33 +17,27 @@ async function main() {
   const { neon } = await import('@neondatabase/serverless');
   const sql = neon(url);
 
-  const [speciesCount] = (await sql`SELECT COUNT(*)::int AS count FROM species`) as {
-    count: number;
-  }[];
+  // Seed only a genuinely empty database. There is deliberately no "reset"
+  // path here any more.
+  //
+  // This used to carry a one-time cutover that ran
+  // `TRUNCATE users, plants, ... CASCADE` whenever no species row had a Hebrew
+  // name. It had already served its purpose, but it was a destructive statement
+  // living in a script that runs on *every* deployment, keyed on a condition a
+  // future migration could plausibly reproduce — and CASCADE would now take the
+  // gardens, zones, posts and comments with it. Losing production data to a
+  // build step is not a risk worth carrying for a cutover that has finished.
+  const [{ count: speciesCount }] = (await sql`
+    SELECT COUNT(*)::int AS count FROM species
+  `) as { count: number }[];
 
-  if (speciesCount.count === 0) {
+  if (speciesCount === 0) {
     console.log('Empty database — seeding demo garden…');
     execSync('npx tsx scripts/seed.ts', { stdio: 'inherit' });
     return;
   }
 
-  // One-time cutover from the pre-redesign demo data: the old seed has no
-  // Hebrew species names. Wipe it and reseed the new demo garden. Idempotent —
-  // after the new seed runs, common_name_he is populated and this never fires.
-  const [hebrewCount] = (await sql`
-    SELECT COUNT(*)::int AS count FROM species WHERE common_name_he IS NOT NULL
-  `) as { count: number }[];
-
-  if (hebrewCount.count === 0) {
-    console.log('Legacy demo data detected — resetting to the redesigned demo garden…');
-    await sql`
-      TRUNCATE TABLE karma_events, observations, adoptions, follows, notifications,
-        auth_tokens, plants, species, users RESTART IDENTITY CASCADE
-    `;
-    execSync('npx tsx scripts/seed.ts', { stdio: 'inherit' });
-  } else {
-    console.log('Database already has current data — skipping seed.');
-  }
+  console.log(`Database already has ${speciesCount} species — skipping seed.`);
 }
 
 main().catch((e) => {
