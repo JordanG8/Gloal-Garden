@@ -10,7 +10,8 @@ import {
   point,
   primaryKey,
   index,
-  uniqueIndex
+  uniqueIndex,
+  type AnyPgColumn
 } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
@@ -82,6 +83,12 @@ export const plants = pgTable('plants', {
   // One pin can stand for a row of plants ("12 basil"). Karma is deliberately
   // per-pin regardless of this number — see karma.ts. Display only.
   quantity: integer('quantity').notNull().default(1),
+  // Nullable on purpose: a street tree belongs to nobody's garden.
+  gardenId: integer('garden_id').references((): AnyPgColumn => gardens.id),
+  // A plain label rather than a `beds` table — a bed has a name and an order
+  // and no behaviour of its own, so a table would be a primary key wrapped
+  // around a string. "Water this bed" is `where garden_id = ? and bed_label = ?`.
+  bedLabel: text('bed_label'),
   // Denormalized from observations. The map read used to run two correlated
   // subqueries per plant for these, which is fine at 11 plants and fatal at
   // thousands. Maintained in the same runBatch that inserts an observation.
@@ -99,6 +106,57 @@ export const plants = pgTable('plants', {
   index('plants_species_idx').on(t.speciesId),
   // Viewport queries: `where geo <@ box(point(minLng,minLat), point(maxLng,maxLat))`.
   index('plants_geo_gist_idx').using('gist', t.geo),
+  // Listing a garden, and the batch-care "everything in this bed" read.
+  index('plants_garden_bed_idx').on(t.gardenId, t.bedLabel),
+]);
+
+/**
+ * A physical place holding several plants: a raised bed, a back garden, a
+ * community plot. Deliberately *not* required — a lemon tree leaning over a
+ * street wall is a bare pin with `garden_id = null`, and forcing it into a
+ * container would be a lie about the world.
+ *
+ * `kind` is the scale, and mostly drives presentation:
+ *   patch      a few plants in one spot
+ *   plot       a whole garden, usually with beds
+ *   community  a shared plot with members and roles
+ */
+export const gardens = pgTable('gardens', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  slug: text('slug').notNull().unique(),
+  kind: text('kind').notNull().default('patch'),
+  description: text('description'),
+  ownerId: integer('owner_id').references(() => users.id).notNull(),
+  // Centre of the garden, used to place its marker at cluster zoom.
+  lat: doublePrecision('lat').notNull(),
+  lng: doublePrecision('lng').notNull(),
+  geo: point('geo', { mode: 'xy' }).generatedAlwaysAs(sql`point(lng, lat)`),
+  // Rough extent in metres, so the map can draw it and "is this plant inside?"
+  // has an answer without asking the user to trace a polygon.
+  radiusM: integer('radius_m').notNull().default(25),
+  visibility: text('visibility').notNull().default('public'),
+  // Denormalized: the map draws one marker per garden with its count on it,
+  // and counting plants per garden on every pan would defeat the purpose.
+  plantCount: integer('plant_count').notNull().default(0),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('gardens_owner_idx').on(t.ownerId),
+  index('gardens_geo_gist_idx').using('gist', t.geo),
+]);
+
+/**
+ * Who may tend a community garden. Solo and patch gardens don't need rows
+ * here — the owner is `gardens.owner_id`.
+ */
+export const gardenMembers = pgTable('garden_members', {
+  gardenId: integer('garden_id').references(() => gardens.id).notNull(),
+  userId: integer('user_id').references(() => users.id).notNull(),
+  role: text('role').notNull().default('member'), // 'member' | 'keeper'
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  primaryKey({ columns: [t.gardenId, t.userId] }),
+  index('garden_members_user_idx').on(t.userId),
 ]);
 
 export const observations = pgTable('observations', {

@@ -97,6 +97,8 @@ function toPlantSummary(
     id: plant.id,
     name: plant.nickname || plant.customSpeciesName || sp.commonName,
     quantity: plant.quantity,
+    gardenId: plant.gardenId,
+    bedLabel: plant.bedLabel,
     lat: plant.lat,
     lng: plant.lng,
     category: sp.category,

@@ -50,6 +50,13 @@
       "when": 1785101541662,
       "tag": "0006_spatial_and_counters",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785102667985,
+      "tag": "0007_gardens",
+      "breakpoints": true
     }
   ]
 }

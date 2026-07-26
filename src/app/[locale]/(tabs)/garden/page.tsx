@@ -1,48 +1,14 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { getAdoptablesNear, getMyGarden } from '@/lib/data';
+import { getMyGardens } from '@/lib/garden-data';
 import { getSessionUser } from '@/lib/auth-helpers';
 import { getInitialView } from '@/lib/map-view';
-import { getDict, fill, isLocale, type Locale, type Dictionary } from '@/i18n';
-import type { PlantSummary } from '@/lib/types';
-import { plantSubtitle, speciesDisplayName } from '@/lib/msg';
-import { timeAgo } from '@/lib/format';
-import { StatusPill } from '@/components/pills';
+import { getDict, fill, isLocale, type Locale } from '@/i18n';
+import { plantSubtitle } from '@/lib/msg';
 import { PlantImage } from '@/components/plant-art';
-import { pinStatus } from '@/lib/plant-status';
-import { IconForward, IconHeartOutline } from '@/components/icons';
-
-function PlantCard({ plant, locale, dict }: { plant: PlantSummary; locale: Locale; dict: Dictionary }) {
-  return (
-    <Link
-      href={`/${locale}/plants/${plant.id}`}
-      className="flex items-center gap-3.5 rounded-2xl border border-line bg-card p-3 transition hover:border-bark active:scale-[0.99]"
-    >
-      <PlantImage
-        photoUrl={plant.latestPhotoUrl}
-        category={plant.category}
-        emoji={plant.emoji}
-        alt={plant.name}
-        className="h-[64px] w-[64px] shrink-0 rounded-[14px]"
-        emojiSize={26}
-      />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="line-clamp-2 font-display text-[18px] font-bold uppercase leading-tight text-ink">
-          {plant.name}
-        </span>
-        <span className="truncate text-[12px] text-muted-foreground">
-          {[
-            speciesDisplayName(plant, locale) === plant.name ? null : speciesDisplayName(plant, locale),
-            plant.lastWateredAt && fill(dict.garden.lastCare, { time: timeAgo(plant.lastWateredAt, locale) }),
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        </span>
-      </div>
-      <StatusPill status={pinStatus(plant)} dict={dict} className="shrink-0 scale-90" />
-    </Link>
-  );
-}
+import { PlantCard } from '@/components/plant/plant-card';
+import { IconForward, IconHeartOutline, IconLeafPair } from '@/components/icons';
 
 async function GardenContent({ locale }: { locale: Locale }) {
   const dict = getDict(locale);
@@ -53,12 +19,16 @@ async function GardenContent({ locale }: { locale: Locale }) {
   // on earth and filtering in JS; "nearby" adoptables are now genuinely the
   // nearest ones, ordered by the GiST KNN operator.
   const view = await getInitialView();
-  const [{ founded, stewarding }, adoptables] = await Promise.all([
+  const [{ founded, stewarding }, adoptables, gardens] = await Promise.all([
     getMyGarden(user.id),
     getAdoptablesNear(view, user.id),
+    getMyGardens(user.id),
   ]);
 
-  const empty = founded.length === 0 && stewarding.length === 0;
+  // Plants filed into a garden are listed under that garden, not repeated in
+  // the flat list — otherwise a 100-plant plot makes this page unusable.
+  const looseFounded = founded.filter((p) => p.gardenId === null);
+  const empty = founded.length === 0 && stewarding.length === 0 && gardens.length === 0;
 
   return (
     <>
@@ -76,11 +46,55 @@ async function GardenContent({ locale }: { locale: Locale }) {
         </div>
       ) : (
         <div className="flex flex-col gap-5">
-          {founded.length > 0 && (
-            <section className="flex flex-col gap-2.5">
-              <h2 className="microlabel text-bark">{dict.garden.founded}</h2>
+          <section className="flex flex-col gap-2.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="microlabel text-bark">{dict.gardens.heading}</h2>
+              <Link
+                href={`/${locale}/gardens/new`}
+                className="text-[12px] font-semibold text-leaf transition hover:text-forest"
+              >
+                + {dict.gardens.create}
+              </Link>
+            </div>
+            {gardens.length === 0 ? (
+              <p className="rounded-2xl border border-dashed border-line bg-card/60 px-4 py-5 text-center text-[12.5px] leading-relaxed text-muted-foreground">
+                {dict.gardens.empty2}
+              </p>
+            ) : (
               <div className="stagger flex flex-col gap-2.5">
-                {founded.map((plant) => (
+                {gardens.map((garden) => (
+                  <Link
+                    key={garden.id}
+                    href={`/${locale}/gardens/${garden.slug}`}
+                    className="flex items-center gap-3.5 rounded-2xl border border-line bg-card p-3.5 transition hover:border-bark active:scale-[0.99]"
+                  >
+                    <span className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-[14px] bg-moss text-forest">
+                      <IconLeafPair size={24} />
+                    </span>
+                    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                      <span className="truncate font-display text-[18px] font-bold uppercase leading-tight text-ink">
+                        {garden.name}
+                      </span>
+                      <span className="truncate text-[12px] text-muted-foreground">
+                        {garden.plantCount === 1
+                          ? dict.gardens.onePlant
+                          : fill(dict.gardens.plantCount, { n: garden.plantCount })}
+                      </span>
+                    </div>
+                    <IconForward size={14} className="shrink-0 text-bark" />
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {looseFounded.length > 0 && (
+            <section className="flex flex-col gap-2.5">
+              <h2 className="microlabel text-bark">
+                {gardens.length > 0 ? dict.gardens.loose : dict.garden.founded}
+              </h2>
+              <div className="stagger flex flex-col gap-2.5">
+                {looseFounded.map((plant) => (
                   <PlantCard key={plant.id} plant={plant} locale={locale} dict={dict} />
                 ))}
               </div>
