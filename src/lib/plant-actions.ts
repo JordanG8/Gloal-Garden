@@ -5,6 +5,16 @@ import { adoptions, karmaEvents, observations, plants, species, users } from '@/
 import { and, desc, eq, gt, isNotNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { emailVerificationBlocker, requireUserId } from './auth-helpers';
+import { isValidPhotoUrl } from './photo-url';
+import {
+  CARE_MODES,
+  DATE_PRECISIONS,
+  nextWaterDueAt,
+  PLANT_ORIGINS,
+  type CareMode,
+  type DatePrecision,
+  type PlantOrigin,
+} from './care-schedule';
 import { computeStatus } from './plant-status';
 import {
   activityWindowDays,
@@ -302,16 +312,32 @@ async function maybePayEstablishedBonus(
   }
 }
 
+/** Full species row, so cadence and harvest windows resolve at insert time. */
+async function loadSpecies(speciesId: number) {
+  const [row] = await db.select().from(species).where(eq(species.id, speciesId)).limit(1);
+  return row ?? null;
+}
+
 export async function createPlant(input: {
-  speciesId: number;
+  /** What the planter typed in — free text when nothing in the catalogue fits. */
+  plantName: string;
   lat: number;
   lng: number;
   nickname: string;
   description: string;
-  accessNotes: string;
   photoUrl?: string;
-  /** Free-typed name when the planter chose "Other" instead of a species. */
-  customSpeciesName?: string;
+  /** Chosen from the species catalogue, when the planter recognised it. */
+  speciesId?: number;
+  /** How it got there. Defaults to "I planted it" for backwards compatibility. */
+  origin?: string;
+  /** When it went in the ground, if known — may be decades ago. */
+  plantedAt?: string;
+  plantedAtPrecision?: string;
+  /** Whether this is yours to water at all. */
+  careMode?: string;
+  gardenId?: number | null;
+  bedLabel?: string | null;
+  quantity?: number;
 }): Promise<ActionResult> {
   const userId = await requireUserId();
   if (!userId) return { ok: false, error: 'You must be signed in to add a plant.' };
@@ -325,17 +351,13 @@ export async function createPlant(input: {
     return { ok: false, error: 'Invalid location.' };
   }
 
-  const customSpeciesName = input.customSpeciesName?.trim().slice(0, 80) || null;
-  if (!customSpeciesName && !Number.isInteger(input.speciesId)) {
-    return { ok: false, error: 'Please choose a species.' };
+  const customSpeciesName = input.plantName.trim().slice(0, 80);
+  if (!customSpeciesName) {
+    return { ok: false, error: 'error_plant_name' };
   }
 
   const photoUrl = input.photoUrl?.trim() || null;
-  const validPhoto =
-    !photoUrl ||
-    /^https?:\/\//.test(photoUrl) ||
-    (/^data:image\/(jpeg|png|webp);base64,/.test(photoUrl) && photoUrl.length <= 2_100_000);
-  if (!validPhoto) {
+  if (!isValidPhotoUrl(photoUrl)) {
     return { ok: false, error: 'That photo could not be attached. Please try again.' };
   }
 
@@ -368,20 +390,76 @@ export async function createPlant(input: {
         ),
     ]);
 
-    const speciesId = customSpeciesName ? await getOrCreateCustomSpeciesId() : input.speciesId;
+    // Prefer a real species when the planter recognised one — that's what makes
+    // seasonal watering and calendar harvest windows work. The free-typed
+    // fallback still points at the generic marker row so cadence defaults
+    // resolve to something.
+    const chosen = input.speciesId ? await loadSpecies(input.speciesId) : null;
+    const speciesId = chosen?.id ?? (await getOrCreateCustomSpeciesId());
+
+    const origin = PLANT_ORIGINS.includes(input.origin as PlantOrigin)
+      ? (input.origin as PlantOrigin)
+      : 'planted_by_me';
+    const careMode = CARE_MODES.includes(input.careMode as CareMode)
+      ? (input.careMode as CareMode)
+      : // A tree that was already there is not yours to water unless you say so.
+        origin === 'already_there' || origin === 'wild'
+        ? 'observe_only'
+        : 'scheduled';
+    const plantedAtPrecision = DATE_PRECISIONS.includes(
+      input.plantedAtPrecision as DatePrecision
+    )
+      ? (input.plantedAtPrecision as DatePrecision)
+      : 'day';
+
+    // A twenty-year-old street tree should not be recorded as planted today.
+    // Anything in the future, or before living memory, falls back to now.
+    const parsedPlantedAt = input.plantedAt ? new Date(input.plantedAt) : null;
+    const plantedAt =
+      parsedPlantedAt &&
+      !Number.isNaN(parsedPlantedAt.getTime()) &&
+      parsedPlantedAt.getTime() <= now.getTime() &&
+      parsedPlantedAt.getFullYear() >= 1900
+        ? parsedPlantedAt
+        : now;
+
+    // Only stamp "watered just now" for something you actually just planted and
+    // watered in. Claiming a mature tree was watered today suppresses its first
+    // real reminder and was the reason established plants looked cared-for.
+    const lastWateredAt = origin === 'planted_by_me' && careMode === 'scheduled' ? now : null;
+
+    const draft = {
+      careMode,
+      lastWateredAt,
+      plantedAt,
+      waterIntervalSummerDays: null,
+      waterIntervalWinterDays: null,
+    };
 
     const [plant] = await db
       .insert(plants)
       .values({
         speciesId,
-        customSpeciesName,
+        // Keep the typed name only when it isn't just an echo of the species.
+        customSpeciesName: chosen ? null : customSpeciesName,
         lat: input.lat,
         lng: input.lng,
         plantedBy: userId,
         nickname: input.nickname.trim().slice(0, 80) || null,
         description: input.description.trim().slice(0, 500) || null,
-        accessNotes: input.accessNotes.trim().slice(0, 300) || null,
-        lastWateredAt: new Date(),
+        origin,
+        plantedAt,
+        plantedAtPrecision,
+        careMode,
+        lastWateredAt,
+        waterDueAt: nextWaterDueAt(draft, chosen ?? { wateringFrequencyDays: 7 }, now),
+        gardenId: input.gardenId ?? null,
+        bedLabel: input.bedLabel?.trim().slice(0, 40) || null,
+        quantity: Math.min(Math.max(Math.round(input.quantity ?? 1), 1), 999),
+        // Denormalized so the map read doesn't need a correlated subquery per
+        // plant. Kept in step with `observations` by every write path below.
+        latestPhotoUrl: photoUrl,
+        photoCount: photoUrl ? 1 : 0,
       })
       .returning({ id: plants.id });
 
@@ -455,13 +533,9 @@ export async function logCareAction(input: {
 
   const caption = input.caption?.trim().slice(0, 500) || null;
   const photoUrl = input.photoUrl?.trim() || null;
-  // Uploads resolve to a hosted URL, or an inline data URL when no blob
-  // storage is configured (kept small by client-side compression).
-  const validPhoto =
-    !photoUrl ||
-    /^https?:\/\//.test(photoUrl) ||
-    (/^data:image\/(jpeg|png|webp);base64,/.test(photoUrl) && photoUrl.length <= 2_100_000);
-  if (!validPhoto) {
+  // Uploads resolve to a hosted URL, or — outside production only — an inline
+  // data URL when no blob storage is configured.
+  if (!isValidPhotoUrl(photoUrl)) {
     return { ok: false, error: 'That photo could not be attached. Please try again.' };
   }
 
@@ -556,6 +630,8 @@ export async function logCareAction(input: {
 
     // 1. The observation itself (needed for the ledger FK).
     const observationType = input.type === 'report' ? 'alert' : input.type;
+    const observationPhoto =
+      input.type === 'photo' || input.type === 'harvest' ? photoUrl : null;
     const [obs] = await db
       .insert(observations)
       .values({
@@ -563,7 +639,7 @@ export async function logCareAction(input: {
         userId,
         type: observationType,
         caption,
-        photoUrl: input.type === 'photo' || input.type === 'harvest' ? photoUrl : null,
+        photoUrl: observationPhoto,
         harvestQuantity: input.type === 'harvest' ? input.harvestQuantity?.trim().slice(0, 100) || null : null,
         diseaseTag: input.type === 'report' ? diseaseTag : null,
       })
@@ -571,11 +647,29 @@ export async function logCareAction(input: {
 
     // 2. Plant column updates + ledger rows + karma increment, atomically.
     const plantUpdate: Record<string, unknown> = { lastCheckedAt: now };
-    if (input.type === 'water') plantUpdate.lastWateredAt = now;
+    if (input.type === 'water') {
+      plantUpdate.lastWateredAt = now;
+      // Materialize the next due date rather than re-deriving it per row on
+      // every read. `plants_water_due_idx` turns "what's thirsty?" into a range
+      // scan, and the daily sweep needs it to find plants without walking the
+      // whole table. Null for anything that's never due.
+      plantUpdate.waterDueAt = nextWaterDueAt(
+        { ...plant, lastWateredAt: now },
+        sp,
+        now
+      );
+    }
     if (input.type === 'report' && canFlipStatus(privilege)) {
       plantUpdate.status = diseaseTag && DISEASE_TAGS.includes(diseaseTag) ? 'diseased' : 'needs_attention';
     }
     if (input.type === 'resolve') plantUpdate.status = 'growing';
+    if (observationPhoto) {
+      // Increment in SQL rather than read-modify-write: the Neon HTTP driver
+      // has no interactive transactions, so a concurrent photo would otherwise
+      // clobber this count.
+      plantUpdate.latestPhotoUrl = observationPhoto;
+      plantUpdate.photoCount = sql`${plants.photoCount} + 1`;
+    }
 
     const statements: BatchItem[] = [
       db.update(plants).set(plantUpdate).where(eq(plants.id, plant.id)),

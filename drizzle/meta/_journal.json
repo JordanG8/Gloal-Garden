@@ -36,6 +36,83 @@
       "when": 1784316301880,
       "tag": "0004_add_custom_species_name",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785101497870,
+      "tag": "0005_perf_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785101541662,
+      "tag": "0006_spatial_and_counters",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1785102667985,
+      "tag": "0007_gardens",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785103351265,
+      "tag": "0008_planting_reality",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785103498809,
+      "tag": "0009_species_catalog_israel",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785104431214,
+      "tag": "0010_social",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785104442201,
+      "tag": "0011_social_ranking",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785104443120,
+      "tag": "0012_zones_israel",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785104736440,
+      "tag": "0013_karma_social_targets",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1785105244655,
+      "tag": "0014_int_array_paths",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1785109340717,
+      "tag": "0015_backfill_water_due",
+      "breakpoints": true
     }
   ]
 }

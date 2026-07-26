@@ -1,24 +1,24 @@
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
-import { getGardenData } from '@/lib/data';
 import { getSessionUser } from '@/lib/auth-helpers';
+import { getInitialView } from '@/lib/map-view';
+import { getSpeciesCatalog } from '@/lib/species-data';
 import { AddPlantFlow } from '@/components/add/add-plant-flow';
 
-const FALLBACK_CENTER = { lat: 32.5185, lng: 35.0047 };
-
 async function AddContent({ locale }: { locale: string }) {
-  const [user, { plants, speciesList }] = await Promise.all([getSessionUser(), getGardenData()]);
+  // Open the spot picker on the map you were just looking at. This used to
+  // average every plant's coordinates, which required loading the whole table
+  // and pointed at open water once the data covered more than one town.
+  const [user, view, catalog] = await Promise.all([
+    getSessionUser(),
+    getInitialView(),
+    getSpeciesCatalog(),
+  ]);
   if (!user) redirect(`/${locale}/welcome`);
 
-  const center =
-    plants.length > 0
-      ? {
-          lat: plants.reduce((sum, p) => sum + p.lat, 0) / plants.length,
-          lng: plants.reduce((sum, p) => sum + p.lng, 0) / plants.length,
-        }
-      : FALLBACK_CENTER;
-
-  return <AddPlantFlow speciesList={speciesList} user={user} center={center} />;
+  return (
+    <AddPlantFlow user={user} center={{ lat: view.lat, lng: view.lng }} catalog={catalog} />
+  );
 }
 
 function AddSkeleton() {

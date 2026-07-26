@@ -2,17 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import Map, { Marker, type MapRef } from 'react-map-gl/maplibre';
+import Map, { Layer, Marker, Source, type MapRef } from 'react-map-gl/maplibre';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useI18n } from '@/i18n/provider';
+import type { MapCounts, MapFilter } from '@/lib/data';
+import { codeToStatus, MAP_STYLE, PIN_ZOOM, type MapView } from '@/lib/map-bounds';
+import { useMapViewport } from './use-map-viewport';
 import type { PlantSummary, SessionUser } from '@/lib/types';
-import { speciesDisplayName } from '@/lib/msg';
+import { plantSubtitle } from '@/lib/msg';
 import { Avatar } from '@/components/avatar';
-import { STATUS_COLOR, statusLabel } from '@/components/pills';
+import { STATUS_COLOR } from '@/components/pills';
 import { IconSearch, IconLocate, IconClose, IconMail } from '@/components/icons';
 import { PlantPin, pinStatus } from './plant-marker';
 import { UserLocationMarker } from './user-location-marker';
-import { PlantSheet } from './plant-sheet';
 import { ensureRtlTextPlugin } from './rtl-text';
 
 // Register Hebrew/Arabic label shaping once, before any map mounts.
@@ -31,9 +33,6 @@ function headingFromOrientationEvent(e: DeviceOrientationEvent): number | null {
   return null;
 }
 
-const MAP_STYLE = 'https://tiles.openfreemap.org/styles/positron';
-const FALLBACK_CENTER = { lat: 32.5185, lng: 35.0047 }; // Givat Ada
-
 // Exponential smoothing factor for the compass (0 = frozen, 1 = raw/jittery).
 const HEADING_SMOOTHING = 0.4;
 
@@ -51,37 +50,24 @@ function nextHeading(prev: number | null, prevRaw: number | null, raw: number): 
   return prev + step * HEADING_SMOOTHING;
 }
 
-type FilterKey = 'all' | 'water' | 'harvest' | 'steward' | 'trouble';
-
-function matchesFilter(plant: PlantSummary, filter: FilterKey): boolean {
-  switch (filter) {
-    case 'water':
-      return plant.status === 'needs_water';
-    case 'harvest':
-      return plant.status === 'ready_to_harvest';
-    case 'steward':
-      return plant.upForAdoption;
-    case 'trouble':
-      return plant.status === 'needs_attention' || plant.status === 'diseased';
-    default:
-      return true;
-  }
-}
-
 export function MapHome({
-  plants,
+  plants: initialPlants,
   user,
-  adoptedIds,
   dbReady,
+  truncated: initialTruncated,
+  counts: initialCounts,
+  initialView,
 }: {
   plants: PlantSummary[];
   user: SessionUser | null;
-  adoptedIds: number[];
   dbReady: boolean;
+  truncated: boolean;
+  counts: MapCounts;
+  initialView: MapView;
 }) {
   const { dict, locale } = useI18n();
   const mapRef = useRef<MapRef>(null);
-  const [filter, setFilter] = useState<FilterKey>('all');
+  const [filter, setFilter] = useState<MapFilter>('all');
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -216,43 +202,46 @@ export function MapHome({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const center = useMemo(() => {
-    if (plants.length === 0) return FALLBACK_CENTER;
-    const lat = plants.reduce((sum, p) => sum + p.lat, 0) / plants.length;
-    const lng = plants.reduce((sum, p) => sum + p.lng, 0) / plants.length;
-    return { lat, lng };
-  }, [plants]);
+  // Only what's on screen. Filtering happens server-side against the whole
+  // viewport, so the chips no longer describe a page of results.
+  const { tier, plants, points, counts, truncated, loading, onViewportChange } = useMapViewport({
+    mapRef,
+    filter,
+    initial: { plants: initialPlants, counts: initialCounts, truncated: initialTruncated },
+    initialView,
+  });
 
+  // Search narrows what's already loaded — at pin zoom that's the street you're
+  // looking at, which is the scope people mean when they search the map.
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return plants.filter((plant) => {
-      if (!matchesFilter(plant, filter)) return false;
-      if (!q) return true;
-      return (
+    if (!q) return plants;
+    return plants.filter(
+      (plant) =>
         plant.name.toLowerCase().includes(q) ||
         plant.speciesName.toLowerCase().includes(q) ||
         (plant.speciesNameHe ?? '').includes(query.trim()) ||
         plant.scientificName.toLowerCase().includes(q) ||
         (plant.customSpeciesName ?? '').toLowerCase().includes(q) ||
         plant.plantedByName.toLowerCase().includes(q)
-      );
-    });
-  }, [plants, filter, query]);
+    );
+  }, [plants, query]);
 
-  const selected = visible.find((p) => p.id === selectedId) ?? null;
-
-  const counts = useMemo(
+  // MapLibre clusters this itself; we only hand it the points.
+  const clusterData = useMemo(
     () => ({
-      all: plants.length,
-      water: plants.filter((p) => p.status === 'needs_water').length,
-      harvest: plants.filter((p) => p.status === 'ready_to_harvest').length,
-      steward: plants.filter((p) => p.upForAdoption).length,
-      trouble: plants.filter((p) => p.status === 'needs_attention' || p.status === 'diseased').length,
+      type: 'FeatureCollection' as const,
+      features: points.map((p) => ({
+        type: 'Feature' as const,
+        id: p.i,
+        geometry: { type: 'Point' as const, coordinates: [p.x, p.y] },
+        properties: { id: p.i, status: codeToStatus(p.s), adoptable: p.a },
+      })),
     }),
-    [plants]
+    [points]
   );
 
-  const chips: { key: FilterKey; label: string; dot?: string }[] = [
+  const chips: { key: MapFilter; label: string; dot?: string }[] = [
     { key: 'all', label: `${dict.map.all} · ${counts.all}` },
     { key: 'water', label: dict.map.needsWater, dot: STATUS_COLOR.needs_water },
     { key: 'harvest', label: dict.map.harvest, dot: STATUS_COLOR.ready_to_harvest },
@@ -265,19 +254,94 @@ export function MapHome({
       <Map
         key={mapKey}
         ref={mapRef}
-        initialViewState={{ latitude: center.lat, longitude: center.lng, zoom: 15.2 }}
+        initialViewState={{
+          latitude: initialView.lat,
+          longitude: initialView.lng,
+          zoom: initialView.zoom,
+        }}
         mapStyle={MAP_STYLE}
         style={{ width: '100%', height: '100%' }}
         attributionControl={false}
         onClick={() => setSelectedId(null)}
         onError={() => setTilesError(true)}
+        onLoad={onViewportChange}
+        onMoveEnd={onViewportChange}
       >
         {myLocation && (
           <Marker latitude={myLocation.lat} longitude={myLocation.lng}>
             <UserLocationMarker heading={heading} />
           </Marker>
         )}
-        {visible.map((plant) => (
+
+        {/*
+          Zoomed out, plants become clustered dots. These are declarative
+          <Source>/<Layer> rather than imperative map.addSource() on purpose:
+          the tiles-error retry below remounts the whole <Map> via `key`, which
+          would silently discard anything added imperatively.
+        */}
+        {tier === 'cluster' && (
+          <Source
+            id="plant-points"
+            type="geojson"
+            data={clusterData}
+            cluster
+            clusterRadius={50}
+            clusterMaxZoom={Math.floor(PIN_ZOOM)}
+          >
+            <Layer
+              id="plant-clusters"
+              type="circle"
+              filter={['has', 'point_count']}
+              paint={{
+                'circle-color': '#17402B',
+                'circle-opacity': 0.9,
+                'circle-stroke-width': 3,
+                'circle-stroke-color': '#FAF8F2',
+                'circle-radius': [
+                  'interpolate',
+                  ['linear'],
+                  ['get', 'point_count'],
+                  2, 16,
+                  25, 24,
+                  200, 34,
+                  1000, 44,
+                ],
+              }}
+            />
+            <Layer
+              id="plant-cluster-count"
+              type="symbol"
+              filter={['has', 'point_count']}
+              layout={{
+                'text-field': ['get', 'point_count_abbreviated'],
+                'text-size': 13,
+                'text-allow-overlap': true,
+              }}
+              paint={{ 'text-color': '#FAF8F2' }}
+            />
+            <Layer
+              id="plant-point"
+              type="circle"
+              filter={['!', ['has', 'point_count']]}
+              paint={{
+                'circle-radius': 7,
+                'circle-stroke-width': 2.5,
+                'circle-stroke-color': '#FAF8F2',
+                'circle-color': [
+                  'case',
+                  ['==', ['get', 'adoptable'], 1], STATUS_COLOR.steward,
+                  ['==', ['get', 'status'], 'needs_water'], STATUS_COLOR.needs_water,
+                  ['==', ['get', 'status'], 'ready_to_harvest'], STATUS_COLOR.ready_to_harvest,
+                  ['==', ['get', 'status'], 'needs_attention'], STATUS_COLOR.needs_attention,
+                  ['==', ['get', 'status'], 'diseased'], STATUS_COLOR.needs_attention,
+                  STATUS_COLOR.growing,
+                ],
+              }}
+            />
+          </Source>
+        )}
+
+        {tier === 'pins' && visible.map((plant) => (
           <Marker
             key={plant.id}
             latitude={plant.lat}
@@ -286,15 +350,16 @@ export function MapHome({
             style={{ zIndex: plant.id === selectedId ? 30 : undefined }}
             onClick={(e) => {
               e.originalEvent.stopPropagation();
+              // A tap opens the pin in place; the card's own button is the only
+              // way to leave the map.
               setSelectedId(plant.id);
-              mapRef.current?.flyTo({ center: [plant.lng, plant.lat], offset: [0, -140], duration: 700 });
+              mapRef.current?.flyTo({ center: [plant.lng, plant.lat], duration: 700 });
             }}
           >
             <PlantPin
               plant={plant}
               selected={plant.id === selectedId}
-              label={plant.name}
-              statusText={statusLabel(pinStatus(plant) as never, dict)}
+              href={`/${locale}/plants/${plant.id}`}
             />
           </Marker>
         ))}
@@ -375,7 +440,28 @@ export function MapHome({
               </button>
             );
           })}
+          {loading && (
+            <span
+              aria-hidden
+              className="skeleton h-8 w-8 shrink-0 self-center rounded-full opacity-60"
+            />
+          )}
         </div>
+
+        {/*
+          The viewport holds more plants than we draw pins for. Saying so beats
+          silently dropping them, which is what an uncapped map would do to the
+          browser instead.
+        */}
+        {truncated && !query && (
+          <button
+            type="button"
+            onClick={() => mapRef.current?.zoomIn({ duration: 400 })}
+            className="pointer-events-auto animate-rise self-start rounded-full bg-ink/90 px-3.5 py-1.5 text-[11.5px] font-semibold text-cream shadow-[0_2px_8px_rgba(32,37,28,0.25)] backdrop-blur-sm"
+          >
+            {dict.map.zoomForMore}
+          </button>
+        )}
 
         {searchOpen && query && (
           <div className="pointer-events-auto animate-rise flex max-h-64 flex-col gap-1 overflow-y-auto rounded-2xl bg-white/97 p-2 shadow-[0_8px_28px_rgba(32,37,28,0.15)] backdrop-blur-md">
@@ -389,14 +475,16 @@ export function MapHome({
                 onClick={() => {
                   setSelectedId(plant.id);
                   setSearchOpen(false);
-                  mapRef.current?.flyTo({ center: [plant.lng, plant.lat], zoom: 16.5, offset: [0, -140], duration: 800 });
+                  mapRef.current?.flyTo({ center: [plant.lng, plant.lat], zoom: 16.5, duration: 800 });
                 }}
                 className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-start transition hover:bg-chip"
               >
                 <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: STATUS_COLOR[pinStatus(plant)] }} />
-                <span className="flex flex-col">
-                  <span className="text-[13.5px] font-semibold text-ink">{plant.name}</span>
-                  <span className="text-[11px] text-muted-foreground">{speciesDisplayName(plant, locale)}</span>
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate text-[13.5px] font-semibold text-ink">{plant.name}</span>
+                  <span className="truncate text-[11px] text-muted-foreground">
+                    {plantSubtitle(plant, locale, dict)}
+                  </span>
                 </span>
               </button>
             ))}
@@ -444,11 +532,12 @@ export function MapHome({
         onClick={locateMe}
         aria-label={tracking ? dict.map.liveLocationOn : dict.map.locateMe}
         aria-pressed={tracking}
-        className={`absolute bottom-[132px] end-4 z-10 flex h-[50px] w-[50px] items-center justify-center rounded-full shadow-[0_6px_18px_rgba(32,37,28,0.18)] transition active:scale-95 ${
+        className={`absolute bottom-[132px] end-4 z-10 flex items-center gap-2 rounded-full py-3 ps-3.5 pe-[18px] shadow-[0_6px_18px_rgba(32,37,28,0.18)] transition active:scale-95 ${
           tracking ? 'bg-water text-white' : 'bg-white text-forest'
         }`}
       >
-        <IconLocate size={21} className="rtl:-scale-x-100" />
+        <IconLocate size={19} />
+        <span className="text-[13px] font-semibold whitespace-nowrap">{dict.map.myLocation}</span>
       </button>
 
       {locateError && (
@@ -459,14 +548,6 @@ export function MapHome({
         </div>
       )}
 
-      {selected && (
-        <PlantSheet
-          plant={selected}
-          user={user}
-          adopted={adoptedIds.includes(selected.id)}
-          onClose={() => setSelectedId(null)}
-        />
-      )}
     </div>
   );
 }

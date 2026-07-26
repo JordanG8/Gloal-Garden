@@ -3,6 +3,11 @@ import type { PlantStatus } from './plant-status';
 export interface PlantSummary {
   id: number;
   name: string;
+  /** How many physical plants this one pin stands for. 1 for a single tree. */
+  quantity: number;
+  /** Null for a loose pin — a street tree belongs to nobody's garden. */
+  gardenId: number | null;
+  bedLabel: string | null;
   lat: number;
   lng: number;
   category: string;
@@ -26,14 +31,6 @@ export interface PlantSummary {
   daysToHarvest: number | null;
   latestPhotoUrl: string | null;
   photoCount: number;
-}
-
-export interface SpeciesOption {
-  id: number;
-  commonName: string;
-  commonNameHe: string | null;
-  category: string;
-  emoji: string;
 }
 
 export interface ObservationEntry {

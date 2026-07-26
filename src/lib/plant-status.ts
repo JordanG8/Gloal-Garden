@@ -1,3 +1,5 @@
+import { needsWater, readyToHarvest } from './care-schedule';
+
 export type PlantStatus =
   | 'growing'
   | 'needs_water'
@@ -15,35 +17,38 @@ interface StatusPlantInput {
   status: string;
   plantedAt: Date | string;
   lastWateredAt: Date | string | null;
+  careMode?: string | null;
+  waterIntervalSummerDays?: number | null;
+  waterIntervalWinterDays?: number | null;
 }
 
 interface StatusSpeciesInput {
   daysToHarvest: number | null;
   wateringFrequencyDays: number | null;
+  isPerennial?: number | null;
+  harvestMonthStart?: number | null;
+  harvestMonthEnd?: number | null;
+  yearsToFirstHarvest?: number | null;
+  waterIntervalSummerDays?: number | null;
+  waterIntervalWinterDays?: number | null;
 }
 
-function daysSince(date: Date | string): number {
-  const diffMs = Date.now() - new Date(date).getTime();
-  return Math.floor(diffMs / (1000 * 60 * 60 * 24));
-}
-
-export function computeStatus(plant: StatusPlantInput, speciesInfo: StatusSpeciesInput): PlantStatus {  if (STICKY_STATUSES.includes(plant.status as PlantStatus)) {
+export function computeStatus(
+  plant: StatusPlantInput,
+  speciesInfo: StatusSpeciesInput,
+  now: Date = new Date()
+): PlantStatus {
+  if (STICKY_STATUSES.includes(plant.status as PlantStatus)) {
     return plant.status as PlantStatus;
   }
 
-  if (speciesInfo.daysToHarvest) {
-    const age = daysSince(plant.plantedAt);
-    if (age >= speciesInfo.daysToHarvest - 7 && age <= speciesInfo.daysToHarvest + 7) {
-      return 'ready_to_harvest';
-    }
-  }
+  // Perennials fruit on a calendar window once mature; annuals still use the
+  // ±7-day band around days_to_harvest. See care-schedule.ts.
+  if (readyToHarvest(plant.plantedAt, speciesInfo, now)) return 'ready_to_harvest';
 
-  if (speciesInfo.wateringFrequencyDays) {
-    const lastWatered = plant.lastWateredAt ?? plant.plantedAt;
-    if (daysSince(lastWatered) > speciesInfo.wateringFrequencyDays) {
-      return 'needs_water';
-    }
-  }
+  // Returns false for observe_only plants and for anything whose seasonal
+  // interval is zero — an established tree in winter is not neglected.
+  if (needsWater(plant, speciesInfo, now)) return 'needs_water';
 
   return 'growing';
 }
@@ -58,12 +63,12 @@ export function computeStatus(plant: StatusPlantInput, speciesInfo: StatusSpecie
 export function pinStatus(plant: {
   status: string;
   upForAdoption: boolean;
-}): string {
+}): PlantStatus | 'steward' {
   if (plant.status === 'needs_attention' || plant.status === 'diseased') return 'needs_attention';
   if (plant.status === 'needs_water') return 'needs_water';
   if (plant.status === 'ready_to_harvest') return 'ready_to_harvest';
   if (plant.upForAdoption) return 'steward';
-  return plant.status;
+  return plant.status as PlantStatus;
 }
 
 // Tailwind classes for the status badge shown on plant heroes (deep green

@@ -180,6 +180,7 @@ export async function getLeaderboard(): Promise<LeaderboardRow[]> {
 export async function getBadgeProgress(
   id: number
 ): Promise<Partial<Record<import('./karma').BadgeMetric, number>>> {
+  await connection();
   try {
     const [kindRows, extraRows] = await Promise.all([
       db

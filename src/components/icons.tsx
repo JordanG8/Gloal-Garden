@@ -183,14 +183,17 @@ export function IconSearch(props: IconProps) {
   );
 }
 
+/** Classic "my location" crosshair (Google Maps' gps_fixed), in Grove's stroke weight. */
 export function IconLocate(props: IconProps) {
   return (
     <svg {...base(props)}>
+      <circle cx="12" cy="12" r="6.5" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="12" cy="12" r="2.5" fill="currentColor" />
       <path
-        d="M20 4L10.5 13.5M20 4L13.5 20L10.5 13.5M20 4L4 10.5L10.5 13.5"
+        d="M12 1.5V4.5M12 19.5V22.5M22.5 12H19.5M4.5 12H1.5"
         stroke="currentColor"
         strokeWidth="1.8"
-        strokeLinejoin="round"
+        strokeLinecap="round"
       />
     </svg>
   );

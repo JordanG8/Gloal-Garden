@@ -6,14 +6,13 @@ import { eq } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import { revalidatePath } from 'next/cache';
 import { requireUserId } from './auth-helpers';
+import { isValidPhotoUrl } from './photo-url';
 import { LOCALE_COOKIE, isLocale } from '@/i18n/config';
 
 export interface ProfileFormState {
   status: 'idle' | 'success' | 'error';
   message: string;
 }
-
-const VALID_PHOTO = /^(https?:\/\/|data:image\/(jpeg|png|webp);base64,)/;
 
 export async function updateProfileAction(
   _prev: ProfileFormState | undefined,
@@ -30,7 +29,7 @@ export async function updateProfileAction(
   if (displayName.length < 2) {
     return { status: 'error', message: 'name' };
   }
-  if (avatar && !(VALID_PHOTO.test(avatar) && avatar.length <= 2_100_000)) {
+  if (!isValidPhotoUrl(avatar)) {
     return { status: 'error', message: 'photo' };
   }
 

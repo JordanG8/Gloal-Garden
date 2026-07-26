@@ -28,6 +28,8 @@
  *    negative moderation_adjust reversals.
  */
 
+import { expectsWatering, harvestTooYoung, wateringIntervalDays } from './care-schedule';
+
 export type CareActionType = 'water' | 'photo' | 'harvest' | 'report' | 'resolve';
 
 export type KarmaKind =
@@ -43,7 +45,12 @@ export type KarmaKind =
   | 'plant_first_harvest'
   | 'adopt'
   | 'rescue_bonus'
-  | 'moderation_adjust';
+  | 'moderation_adjust'
+  | 'post_created'
+  | 'comment_created'
+  | 'post_score_5'
+  | 'post_score_25'
+  | 'comment_score_10';
 
 export const POINTS = {
   waterDue: 10,
@@ -59,7 +66,50 @@ export const POINTS = {
   plantFirstHarvest: 25,
   adopt: 3,
   rescueBonus: 8,
+  // Posting pays nothing at creation, for the same reason filing a report
+  // doesn't: a post nobody values shouldn't have paid. Value shows up as
+  // threshold awards below.
+  postCreated: 0,
+  commentCreated: 1,
+  postScore5: 5,
+  postScore25: 15,
+  commentScore10: 5,
 } as const;
+
+/**
+ * Score thresholds at which an author is paid, once each, forever. Never
+ * per-vote: a per-vote increment is farmable by toggling a vote off and on.
+ * Paid through the same once-per-target ledger guard as the founder bonuses.
+ */
+export const POST_SCORE_AWARDS: { kind: KarmaKind; atScore: number; points: number }[] = [
+  { kind: 'post_score_5', atScore: 5, points: POINTS.postScore5 },
+  { kind: 'post_score_25', atScore: 25, points: POINTS.postScore25 },
+];
+export const COMMENT_SCORE_AWARDS: { kind: KarmaKind; atScore: number; points: number }[] = [
+  { kind: 'comment_score_10', atScore: 10, points: POINTS.commentScore10 },
+];
+
+/**
+ * Bulk watering taper.
+ *
+ * Watering a 120-plant bed in one tap is a real chore worth real credit, but
+ * paying full price per plant would make it the cheapest karma in the app.
+ * The first few pay in full, then it decays. Applied *after* computeAward, as
+ * a separate multiplier — never inside it, because karma-check.ts asserts
+ * exact point values for the single-plant water path.
+ */
+export const BULK_WATER_FULL_PRICE = 3;
+export const BULK_WATER_HALF_PRICE = 10;
+
+export function bulkWaterMultiplier(indexInBatch: number): number {
+  if (indexInBatch < BULK_WATER_FULL_PRICE) return 1;
+  if (indexInBatch < BULK_WATER_HALF_PRICE) return 0.5;
+  return 0;
+}
+
+/** Posts per hour, per trust level index. A brand-new account gets three. */
+export const POSTS_PER_HOUR = [3, 6, 10, 15, 25];
+export const COMMENTS_PER_HOUR = [10, 20, 40, 60, 100];
 
 export const COMMUNITY_MULTIPLIER = 1.5;
 export const DAILY_CAP = 150;
@@ -111,10 +161,19 @@ export interface AwardContext {
     lastWateredAt: Date | null;
     /** Pre-action computed status (computeStatus). */
     status: string;
+    careMode?: string | null;
+    waterIntervalSummerDays?: number | null;
+    waterIntervalWinterDays?: number | null;
   };
   species: {
     wateringFrequencyDays: number | null;
     daysToHarvest: number | null;
+    isPerennial?: number | null;
+    harvestMonthStart?: number | null;
+    harvestMonthEnd?: number | null;
+    yearsToFirstHarvest?: number | null;
+    waterIntervalSummerDays?: number | null;
+    waterIntervalWinterDays?: number | null;
   };
   /** Plant has at least one photo-bearing observation. */
   plantVerified: boolean;
@@ -161,9 +220,12 @@ function applyMultiplier(base: number, isCommunityAction: boolean): number {
 export function computeAward(ctx: AwardContext): AwardResult {
   const { now, plant, species } = ctx;
   const isCommunity = plant.plantedBy !== ctx.actorId;
-  const freq = species.wateringFrequencyDays ?? DEFAULT_WATERING_FREQUENCY_DAYS;
+  // The seasonal cadence, so "was this due?" agrees with what the map showed.
+  // Null means the plant is never due — observe_only, or a species that wants
+  // no water this season.
+  const resolvedInterval = wateringIntervalDays(plant, species, now);
+  const freq = resolvedInterval ?? species.wateringFrequencyDays ?? DEFAULT_WATERING_FREQUENCY_DAYS;
   const lastWatered = plant.lastWateredAt ?? plant.plantedAt;
-  const plantAgeDays = daysSince(plant.plantedAt, now);
 
   let kind: KarmaKind;
   let base = 0;
@@ -173,7 +235,12 @@ export function computeAward(ctx: AwardContext): AwardResult {
   switch (ctx.actionType) {
     case 'water': {
       const sinceWaterDays = daysSince(lastWatered, now);
-      if (sinceWaterDays >= WATER_DUE_FRACTION * freq) {
+      // Watering a tree that isn't yours to water is a kind thought, not a
+      // chore the garden needed doing.
+      if (resolvedInterval === null) {
+        kind = 'water_early';
+        note = 'note_water_not_needed';
+      } else if (sinceWaterDays >= WATER_DUE_FRACTION * freq) {
         kind = 'water_due';
         base = ctx.plantVerified ? POINTS.waterDue : POINTS.waterDueUnverified;
         if (!ctx.plantVerified) note = 'note_unverified_half';
@@ -206,9 +273,11 @@ export function computeAward(ctx: AwardContext): AwardResult {
       // A photo on the harvest itself is the same public evidence a
       // verification photo would be, so it counts.
       const verified = ctx.plantVerified || ctx.hasPhoto;
-      const tooYoung =
-        species.daysToHarvest !== null &&
-        plantAgeDays < HARVEST_MIN_AGE_FRACTION * species.daysToHarvest;
+      // Perennials carry no `days_to_harvest` — they fruit on a calendar
+      // window instead — so the old `daysToHarvest !== null` guard would have
+      // silently removed this gate for every tree, making a fake citrus
+      // harvest free at 38 points a pop. harvestTooYoung handles both shapes.
+      const tooYoung = harvestTooYoung(ctx.plant.plantedAt, species, now);
       const userCooldown =
         ctx.lastEarnedSameKindByUserAt !== null &&
         hoursSince(ctx.lastEarnedSameKindByUserAt, now) < HARVEST_USER_COOLDOWN_HOURS;
@@ -298,6 +367,51 @@ export function plantNewPoints(input: {
 }
 
 /** Retroactive payout to the reporter when a different user resolves their alert. */
+/**
+ * Karma for a social action.
+ *
+ * A sibling of computeAward rather than a case inside it: AwardContext demands
+ * a plant and a species, computeAward is a total switch over CareActionType,
+ * and karma-check.ts builds a full care context in twenty assertions. Adding a
+ * 'post' branch would make every one of those carry meaningless plant data.
+ *
+ * It shares `dailyCapFor` with care actions on purpose. Give social karma its
+ * own budget and the economy inverts: an idle poster out-earns a gardener,
+ * which is exactly what this file's header exists to prevent.
+ */
+export function socialAward(input: {
+  kind: KarmaKind;
+  basePoints: number;
+  earnedLast24h: number;
+  accountCreatedAt: Date;
+  currentKarma: number;
+  now: Date;
+}): { kind: KarmaKind; points: number; note?: string } {
+  const cap = dailyCapFor(input.accountCreatedAt, input.currentKarma, input.now);
+  const remaining = Math.max(0, cap - input.earnedLast24h);
+  const points = Math.min(input.basePoints, remaining);
+  return {
+    kind: input.kind,
+    points,
+    note: points < input.basePoints ? 'note_daily_cap' : undefined,
+  };
+}
+
+/**
+ * How many posts/comments this account may write per hour.
+ *
+ * The care economy throttles by cooldown per plant; a feed needs a throttle per
+ * author, or one account can bury a small zone. Scales with the same trust
+ * ladder rather than inventing a second one.
+ */
+export function postsPerHourFor(karma: number): number {
+  return POSTS_PER_HOUR[trustLevelIndex(karma)];
+}
+
+export function commentsPerHourFor(karma: number): number {
+  return COMMENTS_PER_HOUR[trustLevelIndex(karma)];
+}
+
 export function reportConfirmedPoints(reporterId: number, plantFounderId: number): number {
   return applyMultiplier(POINTS.reportConfirmed, plantFounderId !== reporterId);
 }
@@ -338,6 +452,14 @@ export const TRUST_LEVELS: TrustLevel[] = [
   { level: 4, name: 'Garden Elder', minKarma: 1500, adoptionCap: 25 },
 ];
 
+export function trustLevelIndex(karma: number): number {
+  let index = 0;
+  for (let i = 0; i < TRUST_LEVELS.length; i += 1) {
+    if (karma >= TRUST_LEVELS[i].minKarma) index = i;
+  }
+  return index;
+}
+
 export function trustLevelFor(karma: number): TrustLevel {
   let current = TRUST_LEVELS[0];
   for (const level of TRUST_LEVELS) {
@@ -375,6 +497,15 @@ export function canEditPlant(ctx: PrivilegeContext & { isSteward: boolean }): bo
   return ctx.karma >= TRUST_LEVELS[3].minKarma;
 }
 
+/**
+ * Zone moderation reuses the existing trust ladder rather than a second
+ * permission system — same shape as canFlipStatus / canResolve above. An
+ * explicit zone mod always qualifies; otherwise it takes Caretaker standing.
+ */
+export function canModerateZone(ctx: { karma: number; isZoneMod: boolean }): boolean {
+  return ctx.isZoneMod || ctx.karma >= TRUST_LEVELS[3].minKarma;
+}
+
 export function canMarkRemoved(ctx: PrivilegeContext): boolean {
   return ctx.isFounder || ctx.karma >= TRUST_LEVELS[3].minKarma;
 }
@@ -409,11 +540,16 @@ export function isUpForAdoption(
     plantedAt: Date;
     lastWateredAt: Date | null;
     lastCheckedAt: Date | null;
+    careMode?: string | null;
   },
   species: { wateringFrequencyDays: number | null },
   now: Date = new Date()
 ): boolean {
   if (plant.status === 'removed' || plant.status === 'dormant') return false;
+  // A tree that was never yours to water cannot be neglected by you. Without
+  // this, every mapped street citrus would advertise itself as abandoned a
+  // fortnight after being pinned.
+  if (!expectsWatering(plant.careMode)) return false;
   const lastTouch = new Date(
     Math.max(
       plant.plantedAt.getTime(),

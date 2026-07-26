@@ -371,6 +371,22 @@ async function main() {
     ), 0)
   `);
 
+  // The seed writes observations directly rather than going through
+  // logCareAction, so it has to reconcile the denormalized photo counters the
+  // map reads. Same statement as the backfill in migration 0006.
+  await db.execute(sql`
+    update plants p set
+      latest_photo_url = (
+        select o.photo_url from observations o
+        where o.plant_id = p.id and o.photo_url is not null
+        order by o.created_at desc, o.id desc limit 1
+      ),
+      photo_count = (
+        select count(*) from observations o
+        where o.plant_id = p.id and o.photo_url is not null
+      )
+  `);
+
   // Badges from real metrics, using the production evaluator.
   for (const user of insertedUsers) {
     const [kindRows, extraRows] = await Promise.all([
@@ -427,6 +443,15 @@ async function main() {
     totals.map((t) => `${t.name}: ${t.karma} karma, ${(t.badges ?? []).length} badges`).join(' | ')
   );
   console.log(`Seeded ${insertedPlants.length} plants, ${obsPlan.length} observations. Done.`);
+
+  // `npm run db:seed -- --scale=large` layers the edge-case personas on top:
+  // RTL users, a 120-plant plot, a street of observe_only citrus, antipodal
+  // coordinates, a 30-deep thread, and every empty state. Kept opt-in so the
+  // default demo garden stays small and legible.
+  if (process.argv.includes('--scale=large')) {
+    const { seedPersonas } = await import('./seed/personas');
+    await seedPersonas();
+  }
 }
 
 main()
