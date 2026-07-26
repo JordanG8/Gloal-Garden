@@ -7,6 +7,7 @@ import {
   integer,
   doublePrecision,
   json,
+  point,
   primaryKey,
   index,
   uniqueIndex
@@ -78,7 +79,27 @@ export const plants = pgTable('plants', {
   description: text('description'),
   accessNotes: text('access_notes'),
   visibility: text('visibility').notNull().default('public'),
-});
+  // One pin can stand for a row of plants ("12 basil"). Karma is deliberately
+  // per-pin regardless of this number — see karma.ts. Display only.
+  quantity: integer('quantity').notNull().default(1),
+  // Denormalized from observations. The map read used to run two correlated
+  // subqueries per plant for these, which is fine at 11 plants and fatal at
+  // thousands. Maintained in the same runBatch that inserts an observation.
+  latestPhotoUrl: text('latest_photo_url'),
+  photoCount: integer('photo_count').notNull().default(0),
+  // lat/lng stay the source of truth; this is a derived index target. Native
+  // Postgres `point` + GiST answers every v1 spatial query (viewport bbox via
+  // `<@ box`, nearest via `<->`) with no PostGIS extension. Note the argument
+  // order: point(x, y) is point(lng, lat).
+  geo: point('geo', { mode: 'xy' }).generatedAlwaysAs(sql`point(lng, lat)`),
+}, (t) => [
+  // "My garden" and public profiles filter by founder.
+  index('plants_planted_by_idx').on(t.plantedBy),
+  // Every map/garden read joins species; the table is small but the join is hot.
+  index('plants_species_idx').on(t.speciesId),
+  // Viewport queries: `where geo <@ box(point(minLng,minLat), point(maxLng,maxLat))`.
+  index('plants_geo_gist_idx').using('gist', t.geo),
+]);
 
 export const observations = pgTable('observations', {
   id: serial('id').primaryKey(),
@@ -90,7 +111,17 @@ export const observations = pgTable('observations', {
   harvestQuantity: text('harvest_quantity'),
   diseaseTag: text('disease_tag'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}, (t) => [
+  // Matches the plant activity feed's ORDER BY exactly (data.ts getPlantDetail).
+  index('observations_plant_created_idx').on(t.plantId, t.createdAt.desc(), t.id.desc()),
+  // Steward "last action on this plant" lookup.
+  index('observations_user_plant_idx').on(t.userId, t.plantId),
+  // Latest-photo lookup: the subquery always adds `photo_url is not null`, so a
+  // partial index keeps it to the rows that can actually answer it.
+  index('observations_plant_photo_idx')
+    .on(t.plantId, t.createdAt.desc())
+    .where(sql`photo_url is not null`),
+]);
 
 export const follows = pgTable('follows', {
   followerId: integer('follower_id').references(() => users.id).notNull(),
@@ -105,7 +136,10 @@ export const adoptions = pgTable('adoptions', {
   plantId: integer('plant_id').references(() => plants.id).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => [
-  primaryKey({ columns: [t.userId, t.plantId] })
+  primaryKey({ columns: [t.userId, t.plantId] }),
+  // The PK is user-first, so every "who stewards this plant?" read (steward
+  // counts on the map, the steward list on a plant page) was a seq scan.
+  index('adoptions_plant_idx').on(t.plantId),
 ]);
 
 // Append-only karma ledger. Zero-point rows are inserted on purpose (they act
@@ -127,6 +161,8 @@ export const karmaEvents = pgTable('karma_events', {
   uniqueIndex('karma_events_once_per_plant_idx')
     .on(t.plantId, t.kind)
     .where(sql`${t.kind} in ('plant_established', 'plant_first_harvest')`),
+  // Per-observation point totals are read for every row of every activity feed.
+  index('karma_events_observation_idx').on(t.observationId),
 ]);
 
 // Single-use, expiring tokens for email verification and password resets.

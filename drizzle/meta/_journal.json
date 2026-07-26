@@ -36,6 +36,20 @@
       "when": 1784316301880,
       "tag": "0004_add_custom_species_name",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785101497870,
+      "tag": "0005_perf_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785101541662,
+      "tag": "0006_spatial_and_counters",
+      "breakpoints": true
     }
   ]
 }
