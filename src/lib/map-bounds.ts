@@ -30,6 +30,16 @@ export const PIN_ZOOM = 15.5;
 /** Between CLUSTER_ZOOM and PIN_ZOOM the map draws clustered dots. */
 export const CLUSTER_ZOOM = 12;
 
+/**
+ * Which tier a zoom level belongs to. Shared so the client can switch what it
+ * draws the instant the gesture crosses the threshold, rather than waiting for
+ * the matching payload — otherwise a zoom-out leaves 200 photo pins piled on a
+ * city-wide view for a debounce plus a round trip.
+ */
+export function tierForZoom(zoom: number): 'pins' | 'cluster' {
+  return Number.isFinite(zoom) && zoom < PIN_ZOOM ? 'cluster' : 'pins';
+}
+
 /** Hard caps so a pathological viewport can never return an unbounded set. */
 export const PIN_LIMIT = 200;
 export const CLUSTER_LIMIT = 3000;
@@ -68,8 +78,89 @@ export interface MapPoint {
   a: 0 | 1;
 }
 
+/**
+ * The map's filter chips. Declared here rather than in `data.ts` so client
+ * code can use them at runtime — `data.ts` is `server-only`, so importing a
+ * *value* from it would break the browser bundle.
+ */
+export type MapFilter = 'all' | 'water' | 'harvest' | 'steward' | 'trouble';
+
+export interface MapCounts {
+  all: number;
+  water: number;
+  harvest: number;
+  steward: number;
+  trouble: number;
+}
+
+/**
+ * The same predicate as `matchesFilter` in data.ts, against the slim wire
+ * format. The cluster tier is filtered and tallied in the browser: the points
+ * already carry status and adoption state, so a chip tap can repaint
+ * immediately instead of refetching a viewport the server would return
+ * unfiltered anyway.
+ */
+export function pointMatchesFilter(point: MapPoint, filter: MapFilter): boolean {
+  switch (filter) {
+    case 'water':
+      return codeToStatus(point.s) === 'needs_water';
+    case 'harvest':
+      return codeToStatus(point.s) === 'ready_to_harvest';
+    case 'steward':
+      return point.a === 1;
+    case 'trouble': {
+      const status = codeToStatus(point.s);
+      return status === 'needs_attention' || status === 'diseased';
+    }
+    default:
+      return true;
+  }
+}
+
+export function tallyPoints(points: MapPoint[]): MapCounts {
+  const counts: MapCounts = { all: points.length, water: 0, harvest: 0, steward: 0, trouble: 0 };
+  for (const point of points) {
+    if (pointMatchesFilter(point, 'water')) counts.water += 1;
+    if (pointMatchesFilter(point, 'harvest')) counts.harvest += 1;
+    if (pointMatchesFilter(point, 'steward')) counts.steward += 1;
+    if (pointMatchesFilter(point, 'trouble')) counts.trouble += 1;
+  }
+  return counts;
+}
+
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
+
+/** Folds an out-of-range longitude back into [-180, 180]. 181 → -179, -181 → 179. */
+const wrapLng = (lng: number) => {
+  if (lng >= -180 && lng <= 180) return lng;
+  return ((((lng + 180) % 360) + 360) % 360) - 180;
+};
+
+/**
+ * Puts a viewport into the form the query builder expects.
+ *
+ * MapLibre pans horizontally without limit, so `getBounds()` happily returns
+ * longitudes outside [-180, 180] — 179 → 181 after crossing the antimeridian,
+ * and arbitrarily large values once you keep dragging west. Clamping those
+ * into range collapses the box (181 becomes 180, so 179→181 becomes an
+ * 0.0-wide strip and every plant vanishes); wrapping preserves it and hands
+ * `splitAntimeridian` the `minLng > maxLng` form it already knows how to cut
+ * in two. A viewport wider than the world just becomes the world.
+ */
+export function normalizeBounds(bounds: MapBounds): MapBounds {
+  const minLat = clamp(Math.min(bounds.minLat, bounds.maxLat), -90, 90);
+  const maxLat = clamp(Math.max(bounds.minLat, bounds.maxLat), -90, 90);
+  if (bounds.maxLng - bounds.minLng >= 360) {
+    return { minLng: -180, maxLng: 180, minLat, maxLat };
+  }
+  return {
+    minLng: wrapLng(bounds.minLng),
+    maxLng: wrapLng(bounds.maxLng),
+    minLat,
+    maxLat,
+  };
+}
 
 /**
  * Parses a `minLng,minLat,maxLng,maxLat` string (the order MapLibre's
@@ -81,12 +172,7 @@ export function parseBounds(raw: string | null): MapBounds | null {
   const parts = raw.split(',').map(Number);
   if (parts.length !== 4 || parts.some((n) => !Number.isFinite(n))) return null;
   const [minLng, minLat, maxLng, maxLat] = parts;
-  return {
-    minLng: clamp(minLng, -180, 180),
-    minLat: clamp(minLat, -90, 90),
-    maxLng: clamp(maxLng, -180, 180),
-    maxLat: clamp(maxLat, -90, 90),
-  };
+  return normalizeBounds({ minLng, minLat, maxLng, maxLat });
 }
 
 /**
@@ -154,10 +240,10 @@ export function boundsAround(view: MapView, aspect = 0.6): MapBounds {
   // Degrees of longitude visible at a given zoom for a ~1000px-wide viewport.
   const lngSpan = 360 / Math.pow(2, view.zoom) * 3;
   const latSpan = lngSpan * aspect * Math.cos((view.lat * Math.PI) / 180);
-  return {
+  return normalizeBounds({
     minLng: view.lng - lngSpan / 2,
     maxLng: view.lng + lngSpan / 2,
-    minLat: clamp(view.lat - latSpan / 2, -90, 90),
-    maxLat: clamp(view.lat + latSpan / 2, -90, 90),
-  };
+    minLat: view.lat - latSpan / 2,
+    maxLat: view.lat + latSpan / 2,
+  });
 }

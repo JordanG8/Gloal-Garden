@@ -8,10 +8,13 @@ import { rethrowIfPrerenderAbort } from './prerender';
 import { activityWindowDays, isStewardActive, isUpForAdoption } from './karma';
 import {
   CLUSTER_LIMIT,
+  normalizeBounds,
   PIN_LIMIT,
   splitAntimeridian,
   statusToCode,
   type MapBounds,
+  type MapCounts,
+  type MapFilter,
   type MapPoint,
 } from './map-bounds';
 import type { ObservationEntry, PlantSummary, StewardEntry } from './types';
@@ -23,23 +26,17 @@ const NEW_PLANT_WINDOW_DAYS = 14;
  * viewport read is a bitmap index scan instead of a full-table scan. A
  * viewport straddling the antimeridian becomes two boxes OR'd together.
  */
-function withinBounds(bounds: MapBounds): SQL {
-  const boxes = splitAntimeridian(bounds).map(
+function withinBounds(rawBounds: MapBounds): SQL {
+  const boxes = splitAntimeridian(normalizeBounds(rawBounds)).map(
     (b) =>
       sql`${plants.geo} <@ box(point(${b.minLng}, ${b.minLat}), point(${b.maxLng}, ${b.maxLat}))`
   );
   return boxes.length === 1 ? boxes[0] : or(...boxes)!;
 }
 
-export type MapFilter = 'all' | 'water' | 'harvest' | 'steward' | 'trouble';
-
-export interface MapCounts {
-  all: number;
-  water: number;
-  harvest: number;
-  steward: number;
-  trouble: number;
-}
+// Both live in map-bounds.ts, which the client can import at runtime; re-exported
+// here so the existing `from '@/lib/data'` call sites keep working.
+export type { MapCounts, MapFilter };
 
 export interface GardenData {
   plants: PlantSummary[];

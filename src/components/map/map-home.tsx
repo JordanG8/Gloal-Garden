@@ -1,8 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import Map, { Layer, Marker, Source, type MapRef } from 'react-map-gl/maplibre';
+import Map, {
+  Layer,
+  Marker,
+  Source,
+  type ErrorEvent as MapErrorEvent,
+  type MapLayerMouseEvent,
+  type MapRef,
+  type ViewStateChangeEvent,
+} from 'react-map-gl/maplibre';
+import type { GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useI18n } from '@/i18n/provider';
 import type { MapCounts, MapFilter } from '@/lib/data';
@@ -76,9 +85,22 @@ export function MapHome({
   const [tracking, setTracking] = useState(false);
   const [locateError, setLocateError] = useState('');
   const [tilesError, setTilesError] = useState(false);
-  const [mapKey, setMapKey] = useState(0);
+  // Bumping `key` rebuilds the map from scratch — the only way back from a
+  // style that never loaded. `view` is where to rebuild it, captured at the tap,
+  // so a retry doesn't also throw away where the visitor had got to.
+  const [restart, setRestart] = useState({ key: 0, view: initialView });
   const watchIdRef = useRef<number | null>(null);
   const orientationHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+  // `watchIdRef` is only assigned after an `await`, so it can't guard against a
+  // second `startTracking` in the meantime — two geolocation watches and two
+  // orientation listeners would both feed the smoother and make the cone
+  // stutter. This latch is set synchronously.
+  const trackingRef = useRef(false);
+  // Whether the visitor has taken the wheel. The silent locate-on-load must not
+  // fly the camera out from under someone already panning.
+  const userMovedRef = useRef(false);
+  // `load` fires once the style is up and the first frame is drawn.
+  const styleLoadedRef = useRef(false);
   // Continuous (unwrapped) heading + the last raw reading it was derived from,
   // plus a latch so we ignore the relative `deviceorientation` stream once an
   // absolute source is available (mixing the two conventions amplifies jitter).
@@ -87,6 +109,7 @@ export function MapHome({
   const absoluteHeadingRef = useRef(false);
 
   function stopTracking() {
+    trackingRef.current = false;
     if (watchIdRef.current !== null) {
       navigator.geolocation?.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
@@ -106,6 +129,9 @@ export function MapHome({
   useEffect(() => stopTracking, []);
 
   async function startTracking() {
+    if (trackingRef.current) return;
+    trackingRef.current = true;
+
     const handleOrientation = (e: DeviceOrientationEvent) => {
       const isAbsolute =
         e.type === 'deviceorientationabsolute' ||
@@ -177,17 +203,22 @@ export function MapHome({
   // a tap. First-time visitors are never force-prompted here — they still opt
   // in via the locate button — and a failed silent lookup stays quiet.
   useEffect(() => {
-    if (!navigator.geolocation || !navigator.permissions?.query || watchIdRef.current !== null) return;
+    if (!navigator.geolocation || !navigator.permissions?.query || trackingRef.current) return;
     let cancelled = false;
     navigator.permissions
       .query({ name: 'geolocation' as PermissionName })
       .then((status) => {
-        if (cancelled || status.state !== 'granted' || watchIdRef.current !== null) return;
+        if (cancelled || status.state !== 'granted' || trackingRef.current) return;
         navigator.geolocation.getCurrentPosition(
           (pos) => {
             if (cancelled) return;
             const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
             setMyLocation(loc);
+            // Permission lookup and the fix itself both take a moment. If the
+            // visitor started exploring in that window, drop the dot but leave
+            // their camera alone — an unrequested flyTo mid-pan reads as the
+            // map throwing them somewhere.
+            if (userMovedRef.current) return;
             mapRef.current?.flyTo({ center: [loc.lng, loc.lat], zoom: 16, duration: 1200 });
           },
           () => {},
@@ -204,12 +235,81 @@ export function MapHome({
 
   // Only what's on screen. Filtering happens server-side against the whole
   // viewport, so the chips no longer describe a page of results.
-  const { tier, plants, points, counts, truncated, loading, onViewportChange } = useMapViewport({
-    mapRef,
-    filter,
-    initial: { plants: initialPlants, counts: initialCounts, truncated: initialTruncated },
-    initialView,
-  });
+  const { showPins, plants, points, counts, truncated, loading, onViewportChange, onZoomChange } =
+    useMapViewport({
+      mapRef,
+      filter,
+      initial: { plants: initialPlants, counts: initialCounts, truncated: initialTruncated },
+      initialView,
+    });
+
+  /** Current camera, or the view we started from if the map isn't up yet. */
+  const currentView = useCallback((): MapView => {
+    const map = mapRef.current;
+    if (!map) return initialView;
+    const center = map.getCenter();
+    return { lat: center.lat, lng: center.lng, zoom: map.getZoom() };
+  }, [initialView]);
+
+  const handleMoveStart = useCallback((event: ViewStateChangeEvent) => {
+    // `originalEvent` is set only for gestures — a programmatic flyTo has none.
+    if (event.originalEvent) userMovedRef.current = true;
+  }, []);
+
+  const handleLoad = useCallback(() => {
+    styleLoadedRef.current = true;
+    setTilesError(false);
+    onViewportChange();
+  }, [onViewportChange]);
+
+  /**
+   * MapLibre reports every failed request through `error`, and a fast pan
+   * routinely aborts or 404s individual tiles. Treating those as fatal made the
+   * "map failed" banner flash during ordinary panning — and its Retry remounts
+   * the map, so a spurious tap threw the visitor's view away too. A tile that
+   * fails while the style is up is noise; only a map that never came up at all
+   * is worth the banner.
+   */
+  const handleError = useCallback((event: MapErrorEvent) => {
+    const error = event.error as (Error & { status?: number; url?: string }) | undefined;
+    const isResourceError = typeof error?.status === 'number';
+    if (isResourceError && error?.url !== MAP_STYLE) return;
+    if (styleLoadedRef.current) return;
+    console.error('Map failed to load:', event.error);
+    setTilesError(true);
+  }, []);
+
+  // A tapped cluster should open up, not sit there. Zoom to the level where
+  // MapLibre would break this one apart.
+  const handleMapClick = useCallback((event: MapLayerMouseEvent) => {
+    const map = mapRef.current;
+    const cluster = event.features?.find((f) => f.properties?.cluster);
+    if (!map || !cluster) {
+      setSelectedId(null);
+      return;
+    }
+    const [lng, lat] = (cluster.geometry as GeoJSON.Point).coordinates;
+    const source = map.getSource('plant-points') as GeoJSONSource | undefined;
+    const clusterId = cluster.properties?.cluster_id as number | undefined;
+    const fallback = () => map.easeTo({ center: [lng, lat], zoom: map.getZoom() + 2, duration: 500 });
+    if (!source || clusterId === undefined) {
+      fallback();
+      return;
+    }
+    source
+      .getClusterExpansionZoom(clusterId)
+      .then((zoom) => map.easeTo({ center: [lng, lat], zoom, duration: 500 }))
+      .catch(fallback);
+  }, []);
+
+  // The open card belongs to a pin. Once that pin is no longer drawn — zoomed
+  // out to clusters, or panned off screen — the selection stops counting, so a
+  // stale one can't pop a card back open over an unrelated view. Derived rather
+  // than reset in an effect: no extra render, and nothing to keep in sync.
+  const selected =
+    selectedId !== null && showPins && plants.some((plant) => plant.id === selectedId)
+      ? selectedId
+      : null;
 
   // Search narrows what's already loaded — at pin zoom that's the street you're
   // looking at, which is the scope people mean when they search the map.
@@ -252,20 +352,23 @@ export function MapHome({
   return (
     <div className="absolute inset-0 overflow-hidden">
       <Map
-        key={mapKey}
+        key={restart.key}
         ref={mapRef}
         initialViewState={{
-          latitude: initialView.lat,
-          longitude: initialView.lng,
-          zoom: initialView.zoom,
+          latitude: restart.view.lat,
+          longitude: restart.view.lng,
+          zoom: restart.view.zoom,
         }}
         mapStyle={MAP_STYLE}
         style={{ width: '100%', height: '100%' }}
         attributionControl={false}
-        onClick={() => setSelectedId(null)}
-        onError={() => setTilesError(true)}
-        onLoad={onViewportChange}
+        interactiveLayerIds={showPins ? undefined : ['plant-clusters']}
+        onClick={handleMapClick}
+        onError={handleError}
+        onLoad={handleLoad}
+        onMoveStart={handleMoveStart}
         onMoveEnd={onViewportChange}
+        onZoom={onZoomChange}
       >
         {myLocation && (
           <Marker latitude={myLocation.lat} longitude={myLocation.lng}>
@@ -279,7 +382,7 @@ export function MapHome({
           the tiles-error retry below remounts the whole <Map> via `key`, which
           would silently discard anything added imperatively.
         */}
-        {tier === 'cluster' && (
+        {!showPins && (
           <Source
             id="plant-points"
             type="geojson"
@@ -341,13 +444,13 @@ export function MapHome({
           </Source>
         )}
 
-        {tier === 'pins' && visible.map((plant) => (
+        {showPins && visible.map((plant) => (
           <Marker
             key={plant.id}
             latitude={plant.lat}
             longitude={plant.lng}
             anchor="center"
-            style={{ zIndex: plant.id === selectedId ? 30 : undefined }}
+            style={{ zIndex: plant.id === selected ? 30 : undefined }}
             onClick={(e) => {
               e.originalEvent.stopPropagation();
               // A tap opens the pin in place; the card's own button is the only
@@ -358,7 +461,7 @@ export function MapHome({
           >
             <PlantPin
               plant={plant}
-              selected={plant.id === selectedId}
+              selected={plant.id === selected}
               href={`/${locale}/plants/${plant.id}`}
             />
           </Marker>
@@ -374,7 +477,8 @@ export function MapHome({
               type="button"
               onClick={() => {
                 setTilesError(false);
-                setMapKey((k) => k + 1);
+                styleLoadedRef.current = false;
+                setRestart((prev) => ({ key: prev.key + 1, view: currentView() }));
               }}
               className="shrink-0 rounded-full bg-rust-ink/10 px-3 py-1.5 text-[11.5px] font-bold text-rust-ink"
             >
@@ -509,8 +613,13 @@ export function MapHome({
         </div>
       )}
 
-      {/* Empty garden */}
-      {dbReady && plants.length === 0 && (
+      {/*
+        Empty garden. Judged against whichever layer is actually drawn: at the
+        cluster tier `plants` holds the last pin-level viewport, so keying off
+        it floated "plant your first" over a map full of cluster dots. Held back
+        while a fetch is in flight so it can't flash between viewports.
+      */}
+      {dbReady && !loading && (showPins ? plants.length === 0 : points.length === 0) && (
         <div className="absolute inset-x-8 top-1/2 z-10 -translate-y-1/2">
           <div className="animate-pop flex flex-col items-center gap-3 rounded-3xl bg-white/95 p-6 text-center shadow-[0_8px_28px_rgba(32,37,28,0.15)] backdrop-blur-md">
             <span className="text-[40px]">🌱</span>
