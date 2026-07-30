@@ -31,6 +31,8 @@ interface Payload {
   points?: MapPoint[];
   counts?: MapCounts;
   truncated?: boolean;
+  /** Pin-tier only — the cluster read has no way to report a failure. */
+  dbReady?: boolean;
 }
 
 /** What the last applied payload gave us. */
@@ -41,6 +43,7 @@ interface DataState {
   counts: MapCounts;
   truncated: boolean;
   loading: boolean;
+  dbReady: boolean;
 }
 
 function readBounds(map: MapRef): MapBounds | null {
@@ -92,7 +95,7 @@ export function useMapViewport({
 }: {
   mapRef: React.RefObject<MapRef | null>;
   filter: MapFilter;
-  initial: Pick<DataState, 'plants' | 'counts' | 'truncated'>;
+  initial: Pick<DataState, 'plants' | 'counts' | 'truncated' | 'dbReady'>;
   initialView: MapView;
 }) {
   const [data, setData] = useState<DataState>({
@@ -102,6 +105,7 @@ export function useMapViewport({
     counts: initial.counts,
     truncated: initial.truncated,
     loading: false,
+    dbReady: initial.dbReady,
   });
   const [liveTier, setLiveTier] = useState<'pins' | 'cluster'>(tierForZoom(initialView.zoom));
   // `onZoom` fires every frame of a pinch. Mirroring the tier in a ref means the
@@ -139,6 +143,11 @@ export function useMapViewport({
       counts: payload.counts ?? prev.counts,
       truncated: payload.truncated ?? false,
       loading: false,
+      // A database that fell over after the first paint has to be able to say
+      // so. Without this the route's `dbReady: false` was dropped on the floor
+      // and an outage rendered as an empty viewport — which the map then
+      // explained with "plant your first plant".
+      dbReady: payload.dbReady ?? prev.dbReady,
     }));
   }, []);
 
@@ -275,6 +284,7 @@ export function useMapViewport({
     counts,
     truncated: showPins && data.truncated,
     loading: data.loading,
+    dbReady: data.dbReady,
     onViewportChange,
     onZoomChange,
   };

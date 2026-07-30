@@ -62,7 +62,7 @@ function nextHeading(prev: number | null, prevRaw: number | null, raw: number): 
 export function MapHome({
   plants: initialPlants,
   user,
-  dbReady,
+  dbReady: initialDbReady,
   truncated: initialTruncated,
   counts: initialCounts,
   initialView,
@@ -235,13 +235,27 @@ export function MapHome({
 
   // Only what's on screen. Filtering happens server-side against the whole
   // viewport, so the chips no longer describe a page of results.
-  const { showPins, plants, points, counts, truncated, loading, onViewportChange, onZoomChange } =
-    useMapViewport({
-      mapRef,
-      filter,
-      initial: { plants: initialPlants, counts: initialCounts, truncated: initialTruncated },
-      initialView,
-    });
+  const {
+    showPins,
+    plants,
+    points,
+    counts,
+    truncated,
+    loading,
+    dbReady,
+    onViewportChange,
+    onZoomChange,
+  } = useMapViewport({
+    mapRef,
+    filter,
+    initial: {
+      plants: initialPlants,
+      counts: initialCounts,
+      truncated: initialTruncated,
+      dbReady: initialDbReady,
+    },
+    initialView,
+  });
 
   /** Current camera, or the view we started from if the map isn't up yet. */
   const currentView = useCallback((): MapView => {
@@ -280,15 +294,27 @@ export function MapHome({
   }, []);
 
   // A tapped cluster should open up, not sit there. Zoom to the level where
-  // MapLibre would break this one apart.
+  // MapLibre would break this one apart. A tapped *single* dot has no summary
+  // behind it at this tier — only an id and a position — so the useful answer
+  // is to fly to it at pin zoom, where it becomes a real pin the visitor can
+  // open. Previously neither did anything: `plant-point` wasn't interactive, so
+  // the tap fell through to "deselect".
   const handleMapClick = useCallback((event: MapLayerMouseEvent) => {
     const map = mapRef.current;
-    const cluster = event.features?.find((f) => f.properties?.cluster);
-    if (!map || !cluster) {
+    const feature = event.features?.[0];
+    if (!map || !feature) {
       setSelectedId(null);
       return;
     }
-    const [lng, lat] = (cluster.geometry as GeoJSON.Point).coordinates;
+    const [lng, lat] = (feature.geometry as GeoJSON.Point).coordinates;
+
+    if (!feature.properties?.cluster) {
+      const id = feature.properties?.id as number | undefined;
+      if (id !== undefined) setSelectedId(id);
+      map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), PIN_ZOOM), duration: 500 });
+      return;
+    }
+    const cluster = feature;
     const source = map.getSource('plant-points') as GeoJSONSource | undefined;
     const clusterId = cluster.properties?.cluster_id as number | undefined;
     const fallback = () => map.easeTo({ center: [lng, lat], zoom: map.getZoom() + 2, duration: 500 });
@@ -362,7 +388,7 @@ export function MapHome({
         mapStyle={MAP_STYLE}
         style={{ width: '100%', height: '100%' }}
         attributionControl={false}
-        interactiveLayerIds={showPins ? undefined : ['plant-clusters']}
+        interactiveLayerIds={showPins ? undefined : ['plant-clusters', 'plant-point']}
         onClick={handleMapClick}
         onError={handleError}
         onLoad={handleLoad}
@@ -389,7 +415,10 @@ export function MapHome({
             data={clusterData}
             cluster
             clusterRadius={50}
-            clusterMaxZoom={Math.floor(PIN_ZOOM)}
+            // Must cover the whole cluster tier. Flooring 15.5 to 15 stopped
+            // clustering half a zoom level early, so 15.0–15.5 drew every point
+            // in the viewport as a separate dot with no bubbles to tap.
+            clusterMaxZoom={Math.ceil(PIN_ZOOM)}
           >
             <Layer
               id="plant-clusters"
@@ -430,13 +459,19 @@ export function MapHome({
                 'circle-radius': 7,
                 'circle-stroke-width': 2.5,
                 'circle-stroke-color': '#FAF8F2',
+                // Same precedence as `pinStatus`, in the same order: trouble
+                // first, then time-derived states, and "needs a steward" only
+                // when nothing more urgent applies. Testing `adoptable` first
+                // meant a thirsty plant that also wanted a steward drew brown
+                // as a dot and blue as a pin — the same plant changing colour
+                // on zoom. If pinStatus changes, change this with it.
                 'circle-color': [
                   'case',
-                  ['==', ['get', 'adoptable'], 1], STATUS_COLOR.steward,
-                  ['==', ['get', 'status'], 'needs_water'], STATUS_COLOR.needs_water,
-                  ['==', ['get', 'status'], 'ready_to_harvest'], STATUS_COLOR.ready_to_harvest,
                   ['==', ['get', 'status'], 'needs_attention'], STATUS_COLOR.needs_attention,
                   ['==', ['get', 'status'], 'diseased'], STATUS_COLOR.needs_attention,
+                  ['==', ['get', 'status'], 'needs_water'], STATUS_COLOR.needs_water,
+                  ['==', ['get', 'status'], 'ready_to_harvest'], STATUS_COLOR.ready_to_harvest,
+                  ['==', ['get', 'adoptable'], 1], STATUS_COLOR.steward,
                   STATUS_COLOR.growing,
                 ],
               }}
@@ -618,19 +653,31 @@ export function MapHome({
         cluster tier `plants` holds the last pin-level viewport, so keying off
         it floated "plant your first" over a map full of cluster dots. Held back
         while a fetch is in flight so it can't flash between viewports.
+
+        "Nothing here" and "nothing in the world" are different claims, and only
+        the second earns the onboarding call to action. Both counts are taken
+        after filtering, so picking a chip with no matches — or panning out to
+        sea — used to invite you to plant your first plant on an app you may
+        have been using for months.
       */}
       {dbReady && !loading && (showPins ? plants.length === 0 : points.length === 0) && (
         <div className="absolute inset-x-8 top-1/2 z-10 -translate-y-1/2">
-          <div className="animate-pop flex flex-col items-center gap-3 rounded-3xl bg-white/95 p-6 text-center shadow-[0_8px_28px_rgba(32,37,28,0.15)] backdrop-blur-md">
-            <span className="text-[40px]">🌱</span>
-            <p className="text-[14px] font-semibold text-ink">{dict.map.dbEmpty}</p>
-            <Link
-              href={`/${locale}/add`}
-              className="rounded-full bg-forest px-6 py-3 text-[14px] font-semibold text-cream"
-            >
-              {dict.garden.plantFirst}
-            </Link>
-          </div>
+          {filter === 'all' && !query ? (
+            <div className="animate-pop flex flex-col items-center gap-3 rounded-3xl bg-white/95 p-6 text-center shadow-[0_8px_28px_rgba(32,37,28,0.15)] backdrop-blur-md">
+              <span className="text-[40px]">🌱</span>
+              <p className="text-[14px] font-semibold text-ink">{dict.map.dbEmpty}</p>
+              <Link
+                href={`/${locale}/add`}
+                className="rounded-full bg-forest px-6 py-3 text-[14px] font-semibold text-cream"
+              >
+                {dict.garden.plantFirst}
+              </Link>
+            </div>
+          ) : (
+            <p className="animate-pop mx-auto w-fit rounded-full bg-white/95 px-5 py-3 text-center text-[13px] font-semibold text-ink shadow-[0_8px_28px_rgba(32,37,28,0.15)] backdrop-blur-md">
+              {dict.map.noResults}
+            </p>
+          )}
         </div>
       )}
 
