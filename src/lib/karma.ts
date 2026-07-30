@@ -155,25 +155,40 @@ export interface AwardContext {
   actorId: number;
   actionType: CareActionType;
   now: Date;
+  /**
+   * Every field below is REQUIRED, deliberately, even though most may be null.
+   *
+   * These were optional, and the single-plant care path took advantage of it:
+   * it built `species: { wateringFrequencyDays, daysToHarvest }` and dropped
+   * the rest. Optional fields don't fail when omitted — they arrive as
+   * undefined and send the derivation down a different branch. `harvestTooYoung`
+   * could no longer see `isPerennial`, so it fell through to the annual branch,
+   * found no `daysToHarvest` on any tree, and returned false: the fake-harvest
+   * gate documented at the top of this file was off for every perennial, and
+   * the type checker had no objection.
+   *
+   * Required-and-nullable makes the compiler ask the question instead. Pass the
+   * whole row from the query; don't hand-assemble one.
+   */
   plant: {
     plantedBy: number;
     plantedAt: Date;
     lastWateredAt: Date | null;
     /** Pre-action computed status (computeStatus). */
     status: string;
-    careMode?: string | null;
-    waterIntervalSummerDays?: number | null;
-    waterIntervalWinterDays?: number | null;
+    careMode: string | null;
+    waterIntervalSummerDays: number | null;
+    waterIntervalWinterDays: number | null;
   };
   species: {
     wateringFrequencyDays: number | null;
     daysToHarvest: number | null;
-    isPerennial?: number | null;
-    harvestMonthStart?: number | null;
-    harvestMonthEnd?: number | null;
-    yearsToFirstHarvest?: number | null;
-    waterIntervalSummerDays?: number | null;
-    waterIntervalWinterDays?: number | null;
+    isPerennial: number | null;
+    harvestMonthStart: number | null;
+    harvestMonthEnd: number | null;
+    yearsToFirstHarvest: number | null;
+    waterIntervalSummerDays: number | null;
+    waterIntervalWinterDays: number | null;
   };
   /** Plant has at least one photo-bearing observation. */
   plantVerified: boolean;

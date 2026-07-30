@@ -611,13 +611,20 @@ export async function logCareAction(input: {
       actorId: userId,
       actionType: input.type,
       now,
+      // Whole rows, not a hand-picked subset. Every field computeAward branches
+      // on is optional, so omitting one doesn't fail — it silently defaults to
+      // null and sends the derivation down the wrong path. A two-field species
+      // literal here left `harvestTooYoung` unable to see `is_perennial`, so it
+      // fell through to the annual branch, found no `days_to_harvest` on any
+      // tree, and returned false: the fake-harvest gate this file and
+      // care-schedule.ts both document was off for every perennial.
       plant: {
-        plantedBy: plant.plantedBy,
-        plantedAt: plant.plantedAt,
-        lastWateredAt: plant.lastWateredAt,
+        ...plant,
+        // The status computeAward wants is the derived pre-action one, not the
+        // sticky column value.
         status: preStatus,
       },
-      species: { wateringFrequencyDays: sp.wateringFrequencyDays, daysToHarvest: sp.daysToHarvest },
+      species: sp,
       plantVerified: verified,
       hasPhoto: !!photoUrl,
       lastEarnedSameKindByUserAt: lastByUser,

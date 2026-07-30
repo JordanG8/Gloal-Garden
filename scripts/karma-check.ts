@@ -38,8 +38,25 @@ const baseCtx: AwardContext = {
   actorId: 2,
   actionType: 'water',
   now: NOW,
-  plant: { plantedBy: 1, plantedAt: daysAgo(40), lastWateredAt: daysAgo(3), status: 'needs_water' },
-  species: { wateringFrequencyDays: 2, daysToHarvest: 60 },
+  plant: {
+    plantedBy: 1,
+    plantedAt: daysAgo(40),
+    lastWateredAt: daysAgo(3),
+    status: 'needs_water',
+    careMode: 'scheduled',
+    waterIntervalSummerDays: null,
+    waterIntervalWinterDays: null,
+  },
+  species: {
+    wateringFrequencyDays: 2,
+    daysToHarvest: 60,
+    isPerennial: 0,
+    harvestMonthStart: null,
+    harvestMonthEnd: null,
+    yearsToFirstHarvest: null,
+    waterIntervalSummerDays: null,
+    waterIntervalWinterDays: null,
+  },
   plantVerified: true,
   hasPhoto: false,
   lastEarnedSameKindByUserAt: null,
@@ -89,6 +106,42 @@ check(
 check(
   'per-plant harvest cooldown blocks alt rotation',
   computeAward({ ...harvestCtx, lastEarnedSameKindOnPlantAt: daysAgo(0.5) }).points === 0
+);
+
+// Perennials carry no days_to_harvest — they fruit on a calendar window — so
+// the age gate has to read `isPerennial` and `yearsToFirstHarvest` instead.
+// Nothing here exercised that shape, which is why the gate could be disabled
+// (by a caller that dropped those fields) without a single check going red.
+console.log('harvests — perennials');
+const youngTree: AwardContext = {
+  ...harvestCtx,
+  // Two years old, against a lemon that wants five. Note the gate allows a 40%
+  // grace (a half-grown nursery tree crops earlier than a seed), so three years
+  // would sit exactly on the boundary and pass.
+  plant: { ...harvestCtx.plant, plantedAt: daysAgo(2 * 365) },
+  species: {
+    ...harvestCtx.species,
+    daysToHarvest: null,
+    isPerennial: 1,
+    harvestMonthStart: 11,
+    harvestMonthEnd: 3,
+    yearsToFirstHarvest: 5,
+  },
+};
+check(
+  'harvesting a too-young tree pays 0 (no days_to_harvest to fall back on)',
+  computeAward(youngTree).points === 0
+);
+check(
+  'and says why',
+  computeAward(youngTree).note === 'note_harvest_too_young'
+);
+check(
+  'a mature tree harvests normally',
+  computeAward({
+    ...youngTree,
+    plant: { ...youngTree.plant, plantedAt: daysAgo(12 * 365) },
+  }).points === 38
 );
 
 console.log('reports & resolves');

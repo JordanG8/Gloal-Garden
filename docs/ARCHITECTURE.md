@@ -17,9 +17,12 @@ These are load-bearing. Most of the bugs this project has accumulated came from
 violating one of them.
 
 1. **When a pure function takes a plant and a species, pass the whole row.**
-   Never build a partial object literal. Every optional field you omit silently
-   defaults to `null`, and the derivation quietly takes a different branch.
-   This is exactly how the karma harvest gate was disabled for perennials.
+   Never build a partial object literal. An omitted optional field doesn't
+   fail — it arrives as `undefined` and sends the derivation down a different
+   branch. This is exactly how the karma harvest gate was disabled for
+   perennials. `AwardContext` now declares its fields **required and nullable**
+   so the compiler asks the question; prefer that shape for any new derivation
+   input, rather than relying on this rule being read.
 2. **Adding a field to a derivation's input type means auditing every call
    site.** Optional fields fail silently; TypeScript will not flag a caller that
    drops them.
