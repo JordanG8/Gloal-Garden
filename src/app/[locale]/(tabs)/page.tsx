@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { getGardenData } from '@/lib/data';
+import { getGardenData, getRegionCount } from '@/lib/data';
 import { getSessionUser } from '@/lib/auth-helpers';
 import { getInitialView } from '@/lib/map-view';
 import { boundsAround } from '@/lib/map-bounds';
@@ -7,9 +7,11 @@ import { MapHome } from '@/components/map/map-home';
 
 async function MapContent() {
   const view = await getInitialView();
-  const [user, { plants, dbReady, truncated, counts }] = await Promise.all([
+  const bounds = boundsAround(view);
+  const [user, { plants, dbReady, truncated }, region] = await Promise.all([
     getSessionUser(),
-    getGardenData(boundsAround(view)),
+    getGardenData(bounds),
+    getRegionCount(bounds),
   ]);
 
   return (
@@ -18,7 +20,7 @@ async function MapContent() {
       user={user}
       dbReady={dbReady}
       truncated={truncated}
-      counts={counts}
+      region={region}
       initialView={view}
     />
   );

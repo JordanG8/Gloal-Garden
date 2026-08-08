@@ -8,12 +8,10 @@ import {
   pointMatchesFilter,
   quantizeBounds,
   statusToCode,
-  tallyPoints,
   tierForZoom,
   PIN_ZOOM,
   VIEW_COOKIE,
   type MapBounds,
-  type MapCounts,
   type MapFilter,
   type MapPoint,
   type MapView,
@@ -29,7 +27,8 @@ interface Payload {
   tier: 'pins' | 'cluster';
   plants?: PlantSummary[];
   points?: MapPoint[];
-  counts?: MapCounts;
+  /** Plants across the districts this viewport is in range of. */
+  region?: number;
   truncated?: boolean;
   /** Pin-tier only — the cluster read has no way to report a failure. */
   dbReady?: boolean;
@@ -40,7 +39,7 @@ interface DataState {
   tier: 'pins' | 'cluster';
   plants: PlantSummary[];
   points: MapPoint[];
-  counts: MapCounts;
+  region: number;
   truncated: boolean;
   loading: boolean;
   dbReady: boolean;
@@ -95,14 +94,14 @@ export function useMapViewport({
 }: {
   mapRef: React.RefObject<MapRef | null>;
   filter: MapFilter;
-  initial: Pick<DataState, 'plants' | 'counts' | 'truncated' | 'dbReady'>;
+  initial: Pick<DataState, 'plants' | 'region' | 'truncated' | 'dbReady'>;
   initialView: MapView;
 }) {
   const [data, setData] = useState<DataState>({
     tier: 'pins',
     plants: initial.plants,
     points: [],
-    counts: initial.counts,
+    region: initial.region,
     truncated: initial.truncated,
     loading: false,
     dbReady: initial.dbReady,
@@ -140,7 +139,7 @@ export function useMapViewport({
       tier: payload.tier,
       plants: payload.tier === 'pins' ? (payload.plants ?? []) : prev.plants,
       points: payload.tier === 'cluster' ? (payload.points ?? []) : [],
-      counts: payload.counts ?? prev.counts,
+      region: payload.region ?? prev.region,
       truncated: payload.truncated ?? false,
       loading: false,
       // A database that fell over after the first paint has to be able to say
@@ -268,20 +267,11 @@ export function useMapViewport({
     return filter === 'all' ? source : source.filter((p) => pointMatchesFilter(p, filter));
   }, [data.tier, data.points, data.plants, filter]);
 
-  // The cluster payload is unfiltered (the server can't cheaply derive these
-  // statuses in SQL), so at that tier the chips count what's on screen here.
-  // Otherwise the counts would sit frozen at whatever the last pin-level
-  // viewport held.
-  const counts = useMemo(
-    () => (data.tier === 'cluster' ? tallyPoints(data.points) : data.counts),
-    [data.tier, data.points, data.counts]
-  );
-
   return {
     showPins,
     plants: data.plants,
     points,
-    counts,
+    region: data.region,
     truncated: showPins && data.truncated,
     loading: data.loading,
     dbReady: data.dbReady,

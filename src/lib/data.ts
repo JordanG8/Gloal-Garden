@@ -1,19 +1,24 @@
 import { cache } from 'react';
 import { connection } from 'next/server';
 import { db } from '@/db';
-import { adoptions, observations, plants, species, users } from '@/db/schema';
+import { adoptions, observations, plants, species, users, zones } from '@/db/schema';
 import { and, count, desc, eq, inArray, isNotNull, ne, or, sql, type SQL } from 'drizzle-orm';
 import { computeStatus } from './plant-status';
 import { rethrowIfPrerenderAbort } from './prerender';
 import { activityWindowDays, isStewardActive, isUpForAdoption } from './karma';
 import {
   CLUSTER_LIMIT,
+  DISTRICT_REACH_M,
+  districtBounds,
+  districtTouches,
+  expandBounds,
+  innermostDistricts,
   normalizeBounds,
   PIN_LIMIT,
   splitAntimeridian,
   statusToCode,
+  type District,
   type MapBounds,
-  type MapCounts,
   type MapFilter,
   type MapPoint,
 } from './map-bounds';
@@ -34,24 +39,16 @@ function withinBounds(rawBounds: MapBounds): SQL {
   return boxes.length === 1 ? boxes[0] : or(...boxes)!;
 }
 
-// Both live in map-bounds.ts, which the client can import at runtime; re-exported
+// Lives in map-bounds.ts, which the client can import at runtime; re-exported
 // here so the existing `from '@/lib/data'` call sites keep working.
-export type { MapCounts, MapFilter };
+export type { MapFilter };
 
 export interface GardenData {
   plants: PlantSummary[];
   dbReady: boolean;
   /** The viewport held more plants than the pin cap; the map says "zoom in". */
   truncated: boolean;
-  /**
-   * Counts for the current viewport, not for the whole world. The old chips
-   * counted every plant in the database, which stops being meaningful the
-   * moment the map is paged.
-   */
-  counts: MapCounts;
 }
-
-const EMPTY_COUNTS: MapCounts = { all: 0, water: 0, harvest: 0, steward: 0, trouble: 0 };
 
 function matchesFilter(plant: PlantSummary, filter: MapFilter): boolean {
   switch (filter) {
@@ -66,16 +63,6 @@ function matchesFilter(plant: PlantSummary, filter: MapFilter): boolean {
     default:
       return true;
   }
-}
-
-function tally(list: PlantSummary[]): MapCounts {
-  return {
-    all: list.length,
-    water: list.filter((p) => p.status === 'needs_water').length,
-    harvest: list.filter((p) => p.status === 'ready_to_harvest').length,
-    steward: list.filter((p) => p.upForAdoption).length,
-    trouble: list.filter((p) => p.status === 'needs_attention' || p.status === 'diseased').length,
-  };
 }
 
 type PlantRow = typeof plants.$inferSelect;
@@ -164,12 +151,92 @@ export async function getGardenData(
       plants: matching.slice(0, PIN_LIMIT),
       dbReady: true,
       truncated: matching.length > PIN_LIMIT,
-      counts: tally(all),
     };
   } catch (error) {
     rethrowIfPrerenderAbort(error);
     console.error('Failed to load garden data (is POSTGRES_URL configured?):', error);
-    return { plants: [], dbReady: false, truncated: false, counts: EMPTY_COUNTS };
+    return { plants: [], dbReady: false, truncated: false };
+  }
+}
+
+/** Candidates to read before the exact circle test; the box test is indexed. */
+const DISTRICT_CANDIDATES = 64;
+/** How many districts one count query may name, so the SQL stays a sane size. */
+const DISTRICT_LIMIT = 24;
+
+/**
+ * The districts this viewport is in range of.
+ *
+ * The box pre-filter is what keeps this off a sequential scan as grid cells
+ * accumulate — `zones.geo` is GiST-indexed, and a circle's reach isn't
+ * expressible as one. Zones wider than DISTRICT_REACH_M are therefore only
+ * found once the viewport is wide enough to hold their centre, which is exactly
+ * when they stop being too coarse to count against.
+ */
+async function districtsInRange(bounds: MapBounds): Promise<District[]> {
+  const reach = expandBounds(bounds, DISTRICT_REACH_M);
+  const boxes = splitAntimeridian(reach).map(
+    (b) => sql`${zones.geo} <@ box(point(${b.minLng}, ${b.minLat}), point(${b.maxLng}, ${b.maxLat}))`
+  );
+  const rows = await db
+    .select({ id: zones.id, lat: zones.lat, lng: zones.lng, radiusM: zones.radiusM })
+    .from(zones)
+    .where(boxes.length === 1 ? boxes[0] : or(...boxes)!)
+    // Widest first: if a dense patch of grid cells overruns the cap, keep the
+    // districts that account for the most ground.
+    .orderBy(desc(zones.radiusM))
+    .limit(DISTRICT_CANDIDATES);
+
+  const touching = rows.filter((district) => districtTouches(bounds, district));
+  return innermostDistricts(touching).slice(0, DISTRICT_LIMIT);
+}
+
+/** Plants inside one district: indexed box first, then the exact circle. */
+function withinDistrict(district: District): SQL {
+  return and(
+    withinBounds(districtBounds(district)),
+    sql`(6371000 * acos(least(1, greatest(-1,
+      cos(radians(${plants.lat})) * cos(radians(${district.lat}))
+        * cos(radians(${district.lng}) - radians(${plants.lng}))
+      + sin(radians(${plants.lat})) * sin(radians(${district.lat}))
+    )))) <= ${district.radiusM}`
+  )!;
+}
+
+/**
+ * How many plants the map's chip claims — everything in the viewport *plus*
+ * everything in the districts the viewport is in range of.
+ *
+ * A pure viewport count shrank every time you zoomed in, which reads as plants
+ * disappearing rather than as the camera narrowing. Anchoring it to the
+ * districts on screen means the number holds still while you move around inside
+ * a neighbourhood, and only changes when the neighbourhoods do.
+ *
+ * The viewport itself stays in the union for the cases districts can't cover:
+ * open country between towns, a zoom level wider than any district in range,
+ * and a database whose zones were never seeded — where this degrades to exactly
+ * the old per-viewport count.
+ *
+ * One `count(*)`, so overlapping districts can't count a plant twice.
+ */
+export async function getRegionCount(bounds: MapBounds): Promise<number> {
+  await connection();
+  try {
+    const districts = await districtsInRange(bounds);
+    const [row] = await db
+      .select({ n: count() })
+      .from(plants)
+      .where(
+        and(
+          ne(plants.status, 'removed'),
+          or(withinBounds(bounds), ...districts.map(withinDistrict))
+        )
+      );
+    return Number(row?.n ?? 0);
+  } catch (error) {
+    rethrowIfPrerenderAbort(error);
+    console.error('Failed to count the region:', error);
+    return 0;
   }
 }
 

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { getGardenData, getMapPoints, type MapFilter } from '@/lib/data';
+import { getGardenData, getMapPoints, getRegionCount, type MapFilter } from '@/lib/data';
 import { boundsAround, parseBounds, PIN_ZOOM, type MapBounds } from '@/lib/map-bounds';
 
 /**
@@ -51,11 +51,17 @@ export async function GET(request: NextRequest) {
   // Close enough to see individual plants: full summaries so the photo pins
   // and the in-place card have everything they need. Zoomed out: the slim
   // point format, which MapLibre clusters client-side.
+  //
+  // `region` rides along with both tiers — the chip's number is regional, so it
+  // must not change meaning when the tier flips underneath it.
   if (Number.isFinite(zoom) && zoom < PIN_ZOOM) {
-    const points = await getMapPoints(bounds);
-    return NextResponse.json({ tier: 'cluster', points });
+    const [points, region] = await Promise.all([getMapPoints(bounds), getRegionCount(bounds)]);
+    return NextResponse.json({ tier: 'cluster', points, region });
   }
 
-  const { plants, truncated, counts, dbReady } = await getGardenData(bounds, filter);
-  return NextResponse.json({ tier: 'pins', plants, truncated, counts, dbReady });
+  const [{ plants, truncated, dbReady }, region] = await Promise.all([
+    getGardenData(bounds, filter),
+    getRegionCount(bounds),
+  ]);
+  return NextResponse.json({ tier: 'pins', plants, truncated, region, dbReady });
 }

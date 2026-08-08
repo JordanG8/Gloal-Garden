@@ -14,7 +14,7 @@ import Map, {
 import type { GeoJSONSource } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useI18n } from '@/i18n/provider';
-import type { MapCounts, MapFilter } from '@/lib/data';
+import type { MapFilter } from '@/lib/data';
 import { codeToStatus, MAP_STYLE, PIN_ZOOM, type MapView } from '@/lib/map-bounds';
 import { useMapViewport } from './use-map-viewport';
 import type { PlantSummary, SessionUser } from '@/lib/types';
@@ -64,14 +64,15 @@ export function MapHome({
   user,
   dbReady: initialDbReady,
   truncated: initialTruncated,
-  counts: initialCounts,
+  region: initialRegion,
   initialView,
 }: {
   plants: PlantSummary[];
   user: SessionUser | null;
   dbReady: boolean;
   truncated: boolean;
-  counts: MapCounts;
+  /** Plants across the districts the first-paint viewport is in range of. */
+  region: number;
   initialView: MapView;
 }) {
   const { dict, locale } = useI18n();
@@ -239,7 +240,7 @@ export function MapHome({
     showPins,
     plants,
     points,
-    counts,
+    region,
     truncated,
     loading,
     dbReady,
@@ -250,7 +251,7 @@ export function MapHome({
     filter,
     initial: {
       plants: initialPlants,
-      counts: initialCounts,
+      region: initialRegion,
       truncated: initialTruncated,
       dbReady: initialDbReady,
     },
@@ -367,8 +368,11 @@ export function MapHome({
     [points]
   );
 
+  // The number is regional, not per-viewport: it counts the districts the map
+  // is in range of, so zooming into one street doesn't read as the rest of the
+  // neighbourhood's plants vanishing.
   const chips: { key: MapFilter; label: string; dot?: string }[] = [
-    { key: 'all', label: `${dict.map.all} · ${counts.all}` },
+    { key: 'all', label: `${dict.map.all} · ${region}` },
     { key: 'water', label: dict.map.needsWater, dot: STATUS_COLOR.needs_water },
     { key: 'harvest', label: dict.map.harvest, dot: STATUS_COLOR.ready_to_harvest },
     { key: 'steward', label: dict.map.steward, dot: STATUS_COLOR.steward },

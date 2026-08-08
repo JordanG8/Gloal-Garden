@@ -85,20 +85,11 @@ export interface MapPoint {
  */
 export type MapFilter = 'all' | 'water' | 'harvest' | 'steward' | 'trouble';
 
-export interface MapCounts {
-  all: number;
-  water: number;
-  harvest: number;
-  steward: number;
-  trouble: number;
-}
-
 /**
  * The same predicate as `matchesFilter` in data.ts, against the slim wire
- * format. The cluster tier is filtered and tallied in the browser: the points
- * already carry status and adoption state, so a chip tap can repaint
- * immediately instead of refetching a viewport the server would return
- * unfiltered anyway.
+ * format. The cluster tier is filtered in the browser: the points already carry
+ * status and adoption state, so a chip tap can repaint immediately instead of
+ * refetching a viewport the server would return unfiltered anyway.
  */
 export function pointMatchesFilter(point: MapPoint, filter: MapFilter): boolean {
   switch (filter) {
@@ -115,17 +106,6 @@ export function pointMatchesFilter(point: MapPoint, filter: MapFilter): boolean 
     default:
       return true;
   }
-}
-
-export function tallyPoints(points: MapPoint[]): MapCounts {
-  const counts: MapCounts = { all: points.length, water: 0, harvest: 0, steward: 0, trouble: 0 };
-  for (const point of points) {
-    if (pointMatchesFilter(point, 'water')) counts.water += 1;
-    if (pointMatchesFilter(point, 'harvest')) counts.harvest += 1;
-    if (pointMatchesFilter(point, 'steward')) counts.steward += 1;
-    if (pointMatchesFilter(point, 'trouble')) counts.trouble += 1;
-  }
-  return counts;
 }
 
 const clamp = (value: number, min: number, max: number) =>
@@ -246,4 +226,132 @@ export function boundsAround(view: MapView, aspect = 0.6): MapBounds {
     minLat: view.lat - latSpan / 2,
     maxLat: view.lat + latSpan / 2,
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * Districts
+ *
+ * The plant count on the map is *regional*, not per-viewport: it covers the
+ * districts the screen is in range of, so zooming into a street doesn't make
+ * the neighbourhood's plants disappear from the tally. A district is a `zones`
+ * row — a circle with a centre and a radius, same shape the zone directory and
+ * the care sweep count against, so the two agree.
+ * ------------------------------------------------------------------ */
+
+/** Just the geometry of a zone; the map never needs the rest of the row. */
+export interface District {
+  id: number;
+  lat: number;
+  lng: number;
+  radiusM: number;
+}
+
+const EARTH_RADIUS_M = 6371000;
+/** Metres per degree of latitude. Varies by ~0.3%, which no bounding box cares about. */
+const M_PER_DEG_LAT = 111320;
+
+const toRad = (deg: number) => (deg * Math.PI) / 180;
+
+/**
+ * Great-circle metres between two points, by the spherical law of cosines —
+ * deliberately the same formula the SQL in `zones.ts` and the care sweep use,
+ * so a district's edge falls in exactly the same place in both languages.
+ *
+ * Wrap-safe: it works on the cosine of the longitude *difference*, so a point
+ * at 179° and one at -179° come out 2° apart rather than 358°.
+ */
+export function metersBetween(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number }
+): number {
+  const cosine =
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(toRad(b.lng) - toRad(a.lng)) +
+    Math.sin(toRad(a.lat)) * Math.sin(toRad(b.lat));
+  return EARTH_RADIUS_M * Math.acos(clamp(cosine, -1, 1));
+}
+
+/** Degrees of longitude in a given distance at a given latitude. */
+function lngDegrees(meters: number, lat: number): number {
+  // Longitude lines converge at the poles, so a metre is worth more degrees the
+  // further north you go. The floor stops a district at the pole from asking
+  // for a division by ~zero; normalizeBounds turns the result into the world.
+  return meters / (M_PER_DEG_LAT * Math.max(0.01, Math.cos(toRad(lat))));
+}
+
+/**
+ * The box that just contains a district's circle. Used as an index-friendly
+ * pre-filter in front of the exact distance test — `plants.geo` has a GiST
+ * index, and `acos(...)` on every row does not.
+ */
+export function districtBounds(district: District): MapBounds {
+  const latSpan = district.radiusM / M_PER_DEG_LAT;
+  const lngSpan = lngDegrees(district.radiusM, district.lat);
+  return normalizeBounds({
+    minLng: district.lng - lngSpan,
+    maxLng: district.lng + lngSpan,
+    minLat: district.lat - latSpan,
+    maxLat: district.lat + latSpan,
+  });
+}
+
+/** Grows a viewport by a distance on every side. */
+export function expandBounds(bounds: MapBounds, meters: number): MapBounds {
+  const box = normalizeBounds(bounds);
+  const latSpan = meters / M_PER_DEG_LAT;
+  // Widen by the worst case within the box: the edge nearest a pole, where a
+  // metre buys the most longitude.
+  const lngSpan = lngDegrees(meters, Math.max(Math.abs(box.minLat), Math.abs(box.maxLat)));
+  return normalizeBounds({
+    minLng: box.minLng - lngSpan,
+    maxLng: box.maxLng + lngSpan,
+    minLat: box.minLat - latSpan,
+    maxLat: box.maxLat + latSpan,
+  });
+}
+
+/**
+ * How far outside the viewport a district's centre may sit and still be in
+ * range. Comfortably past a city radius, so panning to the edge of town still
+ * counts the town. A district wider than this only joins once you're zoomed out
+ * far enough to have its centre on screen — which is the zoom at which a region
+ * or a country is the right unit to be counting anyway.
+ */
+export const DISTRICT_REACH_M = 30000;
+
+/** Does a district's circle overlap the viewport? */
+export function districtTouches(bounds: MapBounds, district: District): boolean {
+  return splitAntimeridian(normalizeBounds(bounds)).some((box) => {
+    // Closest point of the box to the centre; inside the box that's the centre
+    // itself, and the distance comes out zero.
+    const nearest = {
+      lat: clamp(district.lat, box.minLat, box.maxLat),
+      lng: clamp(district.lng, box.minLng, box.maxLng),
+    };
+    return metersBetween(district, nearest) <= district.radiusM;
+  });
+}
+
+/** Is `inner` a smaller district lying wholly inside `outer`? */
+function swallows(outer: District, inner: District): boolean {
+  if (inner.id === outer.id) return false;
+  // Two circles of the same size can only contain each other if they're the
+  // same circle. Break that tie by id, or they'd cancel each other out and
+  // leave the viewport with no district at all.
+  if (inner.radiusM > outer.radiusM) return false;
+  if (inner.radiusM === outer.radiusM && inner.id > outer.id) return false;
+  return metersBetween(inner, outer) + inner.radiusM <= outer.radiusM;
+}
+
+/**
+ * Keeps the most specific districts in range.
+ *
+ * Zones nest — a plant in Givat Ada is also in the Haifa District and in
+ * Israel — so "everything the viewport touches" would hand back the country
+ * and count every plant in it from a street-level view. Dropping any district
+ * that wholly contains another one in range leaves the tightest cover of what's
+ * on screen. Circles that merely overlap are all kept: the count is one pass
+ * over plants, so an overlap can't count anything twice.
+ */
+export function innermostDistricts(districts: District[]): District[] {
+  return districts.filter((outer) => !districts.some((inner) => swallows(outer, inner)));
 }

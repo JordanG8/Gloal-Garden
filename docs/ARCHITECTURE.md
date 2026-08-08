@@ -223,6 +223,17 @@ feed scope and the moderation unit are one object. Named zones are seeded;
 anything outside one falls into a lazily-created ~5 km grid cell, so a plant
 dropped anywhere on earth still has a community.
 
+Zones are also what the map counts against. The plant count on the map's `All`
+chip is *regional*, not per-viewport: it counts the plants in the viewport plus
+those in every zone the viewport is in range of, so zooming into one street
+doesn't read as the rest of the neighbourhood's plants disappearing. Zones nest,
+so `innermostDistricts` in `map-bounds.ts` drops any zone that wholly contains
+another one in range — otherwise a street-level view would count the whole
+country. It is one `count(*)` per read, so overlapping zones can't count a plant
+twice, and each zone contributes an indexed box scan plus an exact circle
+recheck — the same distance formula `zones.ts` and the nightly sweep use, so the
+map and the zone directory agree on where a district ends.
+
 ---
 
 ## 9. Known debt
