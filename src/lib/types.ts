@@ -33,6 +33,40 @@ export interface PlantSummary {
   photoCount: number;
 }
 
+/**
+ * What a pin on the map actually renders, and nothing else.
+ *
+ * The map used to ship a whole `PlantSummary` per pin — 27 fields, including
+ * two timestamps, a description and access notes — to draw a 68px circle with a
+ * photo in it. At the pin cap that was ~120 kB of JSON per viewport, most of it
+ * never read. These are the fields `plant-marker.tsx` and the search box
+ * actually touch; anything else belongs to the plant page, which fetches its
+ * own data anyway.
+ *
+ * Deliberately a separate type rather than a `Pick<PlantSummary>`: it is a wire
+ * format for one screen, and it should be free to diverge from the summary the
+ * garden and profile pages want.
+ */
+export interface MapPlant {
+  id: number;
+  name: string;
+  lat: number;
+  lng: number;
+  /** Drives the fallback pin art when there's no photo. */
+  category: string;
+  emoji: string;
+  /** All four feed the search box's matching and subtitle. */
+  speciesName: string;
+  speciesNameHe: string | null;
+  scientificName: string;
+  customSpeciesName: string | null;
+  plantedByName: string;
+  status: PlantStatus;
+  /** With `status`, decides which badge the pin wears. */
+  upForAdoption: boolean;
+  latestPhotoUrl: string | null;
+}
+
 export interface ObservationEntry {
   id: number;
   type: string;

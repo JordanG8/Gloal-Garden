@@ -7,6 +7,7 @@ import { computeStatus } from './plant-status';
 import { rethrowIfPrerenderAbort } from './prerender';
 import { activityWindowDays, isStewardActive, isUpForAdoption } from './karma';
 import {
+  boundsCenter,
   CLUSTER_LIMIT,
   DISTRICT_REACH_M,
   districtBounds,
@@ -15,6 +16,9 @@ import {
   innermostDistricts,
   normalizeBounds,
   PIN_LIMIT,
+  PIN_PRECISION,
+  POINT_PRECISION,
+  roundCoord,
   splitAntimeridian,
   statusToCode,
   type District,
@@ -22,7 +26,7 @@ import {
   type MapFilter,
   type MapPoint,
 } from './map-bounds';
-import type { ObservationEntry, PlantSummary, StewardEntry } from './types';
+import type { MapPlant, ObservationEntry, PlantSummary, StewardEntry } from './types';
 
 const NEW_PLANT_WINDOW_DAYS = 14;
 
@@ -44,13 +48,13 @@ function withinBounds(rawBounds: MapBounds): SQL {
 export type { MapFilter };
 
 export interface GardenData {
-  plants: PlantSummary[];
+  plants: MapPlant[];
   dbReady: boolean;
   /** The viewport held more plants than the pin cap; the map says "zoom in". */
   truncated: boolean;
 }
 
-function matchesFilter(plant: PlantSummary, filter: MapFilter): boolean {
+function matchesFilter(plant: MapPlant, filter: MapFilter): boolean {
   switch (filter) {
     case 'water':
       return plant.status === 'needs_water';
@@ -63,6 +67,62 @@ function matchesFilter(plant: PlantSummary, filter: MapFilter): boolean {
     default:
       return true;
   }
+}
+
+/** The narrow row `getGardenData` selects, folded into the map's wire format. */
+function toMapPlant({
+  plant,
+  species: sp,
+  plantedByName,
+}: {
+  plant: {
+    id: number;
+    lat: number;
+    lng: number;
+    nickname: string | null;
+    customSpeciesName: string | null;
+    latestPhotoUrl: string | null;
+    status: string;
+    plantedAt: Date;
+    lastWateredAt: Date | null;
+    lastCheckedAt: Date | null;
+    careMode: string | null;
+    waterIntervalSummerDays: number | null;
+    waterIntervalWinterDays: number | null;
+  };
+  species: {
+    commonName: string;
+    commonNameHe: string | null;
+    scientificName: string;
+    category: string;
+    emoji: string;
+    daysToHarvest: number | null;
+    wateringFrequencyDays: number;
+    isPerennial: number;
+    harvestMonthStart: number | null;
+    harvestMonthEnd: number | null;
+    yearsToFirstHarvest: number | null;
+    waterIntervalSummerDays: number | null;
+    waterIntervalWinterDays: number | null;
+  };
+  plantedByName: string;
+}): MapPlant {
+  return {
+    id: plant.id,
+    name: plant.nickname || plant.customSpeciesName || sp.commonName,
+    lat: roundCoord(plant.lat, PIN_PRECISION),
+    lng: roundCoord(plant.lng, PIN_PRECISION),
+    category: sp.category,
+    emoji: sp.emoji,
+    speciesName: sp.commonName,
+    speciesNameHe: sp.commonNameHe,
+    scientificName: sp.scientificName,
+    customSpeciesName: plant.customSpeciesName,
+    plantedByName,
+    status: computeStatus(plant, sp),
+    upForAdoption: isUpForAdoption(plant, sp),
+    latestPhotoUrl: plant.latestPhotoUrl,
+  };
 }
 
 type PlantRow = typeof plants.$inferSelect;
@@ -127,25 +187,69 @@ export async function getGardenData(
   try {
     // `needs_water` / `ready_to_harvest` / `upForAdoption` are derived from
     // species cadence at read time, so they can't be a WHERE clause without
-    // duplicating karma.ts and plant-status.ts in SQL. Instead read the whole
-    // viewport (already bounded by the GiST index and hard-capped), then filter
-    // and tally in one pass. Exact for any viewport under CLUSTER_LIMIT plants.
+    // duplicating karma.ts and plant-status.ts in SQL — a filtered read still
+    // has to over-fetch and sort it out here.
+    //
+    // The unfiltered read does not: every row it takes is a row it keeps, so it
+    // stops at the pin cap (plus one, to know whether to say "zoom in"). That is
+    // the case the map spends nearly all its time in, and it used to pull
+    // CLUSTER_LIMIT fully-joined rows — 3000 — to render 200 of them.
+    const overFetch = filter === 'all' ? PIN_LIMIT + 1 : CLUSTER_LIMIT;
+    const center = boundsCenter(bounds);
     const plantRows = await db
-      .select({ plant: plants, species: species, plantedByName: users.displayName })
+      // Only the columns a pin draws with, plus the ones `computeStatus` and
+      // `isUpForAdoption` read to derive its badge. Selecting the whole `plants`
+      // and `species` rows dragged along care guides and soil notes for every
+      // pin on screen.
+      .select({
+        plant: {
+          id: plants.id,
+          lat: plants.lat,
+          lng: plants.lng,
+          nickname: plants.nickname,
+          customSpeciesName: plants.customSpeciesName,
+          latestPhotoUrl: plants.latestPhotoUrl,
+          status: plants.status,
+          plantedAt: plants.plantedAt,
+          lastWateredAt: plants.lastWateredAt,
+          lastCheckedAt: plants.lastCheckedAt,
+          careMode: plants.careMode,
+          waterIntervalSummerDays: plants.waterIntervalSummerDays,
+          waterIntervalWinterDays: plants.waterIntervalWinterDays,
+        },
+        species: {
+          commonName: species.commonName,
+          commonNameHe: species.commonNameHe,
+          scientificName: species.scientificName,
+          category: species.category,
+          emoji: species.emoji,
+          daysToHarvest: species.daysToHarvest,
+          wateringFrequencyDays: species.wateringFrequencyDays,
+          isPerennial: species.isPerennial,
+          harvestMonthStart: species.harvestMonthStart,
+          harvestMonthEnd: species.harvestMonthEnd,
+          yearsToFirstHarvest: species.yearsToFirstHarvest,
+          waterIntervalSummerDays: species.waterIntervalSummerDays,
+          waterIntervalWinterDays: species.waterIntervalWinterDays,
+        },
+        plantedByName: users.displayName,
+      })
       .from(plants)
       .innerJoin(species, eq(plants.speciesId, species.id))
       .innerJoin(users, eq(plants.plantedBy, users.id))
       .where(and(ne(plants.status, 'removed'), withinBounds(bounds)))
-      // Newest first, so a viewport denser than the cap shows recent activity
-      // rather than an arbitrary slice.
-      .orderBy(desc(plants.plantedAt))
-      .limit(CLUSTER_LIMIT);
+      // Nearest the middle of the view first, not newest first.
+      //
+      // The map asks for a box larger than the screen so panning has something
+      // to draw. Under a cap, "newest first" spends that budget scattered
+      // anywhere in the box — including entirely off-screen — so a dense area
+      // could return 200 plants and leave the middle of the screen bare.
+      // Distance from the centre spends it on what the user is looking at, and
+      // `<->` on the GiST index is an ordered index scan, not a sort.
+      .orderBy(sql`${plants.geo} <-> point(${center.lng}, ${center.lat})`)
+      .limit(overFetch);
 
-    const stewardCountByPlant = await stewardCountsFor(plantRows.map((row) => row.plant.id));
-    const all: PlantSummary[] = plantRows.map(({ plant, species: sp, plantedByName }) =>
-      toPlantSummary(plant, sp, plantedByName, stewardCountByPlant.get(plant.id) ?? 0)
-    );
-
+    const all: MapPlant[] = plantRows.map(toMapPlant);
     const matching = filter === 'all' ? all : all.filter((p) => matchesFilter(p, filter));
     return {
       plants: matching.slice(0, PIN_LIMIT),
@@ -278,8 +382,8 @@ export async function getMapPoints(bounds: MapBounds): Promise<MapPoint[]> {
 
     return rows.map((row) => ({
       i: row.id,
-      x: row.lng,
-      y: row.lat,
+      x: roundCoord(row.lng, POINT_PRECISION),
+      y: roundCoord(row.lat, POINT_PRECISION),
       s: statusToCode(computeStatus(row, row)),
       a: isUpForAdoption(row, row) ? 1 : 0,
     }));

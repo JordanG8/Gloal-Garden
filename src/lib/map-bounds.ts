@@ -172,19 +172,47 @@ export function splitAntimeridian(bounds: MapBounds): MapBounds[] {
  * Snaps a viewport outward to a grid so small pans reuse the previous result
  * instead of refetching. Coarser at low zoom, where a degree covers more pixels.
  */
-export function quantizeBounds(bounds: MapBounds, zoom: number): string {
+export function snapBounds(bounds: MapBounds, zoom: number): MapBounds {
   const step = zoom >= PIN_ZOOM ? 0.005 : zoom >= CLUSTER_ZOOM ? 0.05 : 0.5;
   const down = (n: number) => Math.floor(n / step) * step;
   const up = (n: number) => Math.ceil(n / step) * step;
-  return [
-    down(bounds.minLng),
-    down(bounds.minLat),
-    up(bounds.maxLng),
-    up(bounds.maxLat),
-    Math.floor(zoom),
-  ]
+  return normalizeBounds({
+    minLng: down(bounds.minLng),
+    minLat: down(bounds.minLat),
+    maxLng: up(bounds.maxLng),
+    maxLat: up(bounds.maxLat),
+  });
+}
+
+/**
+ * The snapped box as a cache key. Sent on the wire too, not just held locally:
+ * a continuous bbox gives every visitor a URL nobody else will ever request,
+ * while a snapped one repeats — across a pan, across a session, across people
+ * looking at the same town — which is what makes the response worth caching at
+ * the edge at all.
+ */
+export function quantizeBounds(bounds: MapBounds, zoom: number): string {
+  const snapped = snapBounds(bounds, zoom);
+  return [snapped.minLng, snapped.minLat, snapped.maxLng, snapped.maxLat, Math.floor(zoom)]
     .map((n) => n.toFixed(3))
     .join(',');
+}
+
+/**
+ * Coordinates as sent to the browser.
+ *
+ * `doublePrecision` round-trips as its full decimal expansion —
+ * `34.96501601483604`, seventeen characters to place a dot. Six decimals is
+ * ~11 cm and five is ~1.1 m, which is finer than a pin is wide and far finer
+ * than a cluster bubble. At three thousand points on a town-wide view the
+ * difference is a third of the payload, spent on digits no one can see.
+ */
+export const PIN_PRECISION = 6;
+export const POINT_PRECISION = 5;
+
+export function roundCoord(value: number, decimals: number): number {
+  const factor = 10 ** decimals;
+  return Math.round(value * factor) / factor;
 }
 
 export function boundsToParam(bounds: MapBounds): string {
@@ -226,6 +254,75 @@ export function boundsAround(view: MapView, aspect = 0.6): MapBounds {
     minLat: view.lat - latSpan / 2,
     maxLat: view.lat + latSpan / 2,
   });
+}
+
+/**
+ * How far past the edge of the screen the map loads.
+ *
+ * Fetching exactly what's visible means the first pixel of a pan has nothing to
+ * draw: a plant one pixel off-screen was never loaded, so it can't slide into
+ * view. A margin means most pans are already paid for — the pins are in memory
+ * before they're needed, and no request is made at all.
+ *
+ * 0.4 of the viewport on every side: 1.8× the width and height, a bit over 3×
+ * the area. Enough to cover a fast flick without asking the database for a
+ * county.
+ */
+export const PAN_MARGIN = 0.4;
+
+/** Grows a viewport by a fraction of its own width and height on each side. */
+export function padBounds(bounds: MapBounds, fraction = PAN_MARGIN): MapBounds {
+  const box = normalizeBounds(bounds);
+  // A box that wraps the antimeridian has minLng > maxLng; its true width is
+  // the walk east from min to max, which is 360 short of the raw difference.
+  const width = box.maxLng >= box.minLng ? box.maxLng - box.minLng : box.maxLng - box.minLng + 360;
+  const height = box.maxLat - box.minLat;
+  return normalizeBounds({
+    minLng: box.minLng - width * fraction,
+    maxLng: box.maxLng + width * fraction,
+    minLat: box.minLat - height * fraction,
+    maxLat: box.maxLat + height * fraction,
+  });
+}
+
+/** The middle of a viewport, walking east across the antimeridian if it wraps. */
+export function boundsCenter(bounds: MapBounds): { lat: number; lng: number } {
+  const box = normalizeBounds(bounds);
+  const lng =
+    box.maxLng >= box.minLng
+      ? (box.minLng + box.maxLng) / 2
+      : wrapLng((box.minLng + box.maxLng + 360) / 2);
+  return { lat: (box.minLat + box.maxLat) / 2, lng };
+}
+
+/** Is this point inside the viewport? */
+export function boundsContain(bounds: MapBounds, point: { lat: number; lng: number }): boolean {
+  return splitAntimeridian(normalizeBounds(bounds)).some(
+    (box) =>
+      point.lng >= box.minLng &&
+      point.lng <= box.maxLng &&
+      point.lat >= box.minLat &&
+      point.lat <= box.maxLat
+  );
+}
+
+/**
+ * Does `outer` fully contain `inner`? The map uses this to skip a fetch
+ * entirely: if the viewport is still inside what's already loaded, the pins for
+ * it are in memory and there is nothing to ask for.
+ */
+export function boundsCover(outer: MapBounds, inner: MapBounds): boolean {
+  const o = normalizeBounds(outer);
+  const i = normalizeBounds(inner);
+  if (i.minLat < o.minLat || i.maxLat > o.maxLat) return false;
+  // Compare longitudes as offsets walking east from the outer box's west edge,
+  // so a pair that straddles the antimeridian compares as one continuous span.
+  const east = (from: number, to: number) => (((to - from) % 360) + 360) % 360;
+  const outerWidth = o.maxLng >= o.minLng ? o.maxLng - o.minLng : east(o.minLng, o.maxLng);
+  if (outerWidth >= 360) return true;
+  const innerStart = east(o.minLng, i.minLng);
+  const innerWidth = i.maxLng >= i.minLng ? i.maxLng - i.minLng : east(i.minLng, i.maxLng);
+  return innerStart + innerWidth <= outerWidth + 1e-9;
 }
 
 /* ------------------------------------------------------------------ *

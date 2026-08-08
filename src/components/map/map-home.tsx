@@ -17,7 +17,7 @@ import { useI18n } from '@/i18n/provider';
 import type { MapFilter } from '@/lib/data';
 import { codeToStatus, MAP_STYLE, PIN_ZOOM, type MapView } from '@/lib/map-bounds';
 import { useMapViewport } from './use-map-viewport';
-import type { PlantSummary, SessionUser } from '@/lib/types';
+import type { MapPlant, SessionUser } from '@/lib/types';
 import { plantSubtitle } from '@/lib/msg';
 import { Avatar } from '@/components/avatar';
 import { STATUS_COLOR } from '@/components/pills';
@@ -67,7 +67,7 @@ export function MapHome({
   region: initialRegion,
   initialView,
 }: {
-  plants: PlantSummary[];
+  plants: MapPlant[];
   user: SessionUser | null;
   dbReady: boolean;
   truncated: boolean;

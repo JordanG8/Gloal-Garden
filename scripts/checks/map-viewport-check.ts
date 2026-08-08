@@ -13,6 +13,9 @@
  */
 
 import {
+  boundsCenter,
+  boundsContain,
+  boundsCover,
   boundsToParam,
   districtBounds,
   districtTouches,
@@ -20,12 +23,16 @@ import {
   innermostDistricts,
   metersBetween,
   normalizeBounds,
+  padBounds,
   parseBounds,
   pointMatchesFilter,
+  quantizeBounds,
+  snapBounds,
   splitAntimeridian,
   statusToCode,
   tierForZoom,
   DISTRICT_REACH_M,
+  PAN_MARGIN,
   PIN_ZOOM,
   type District,
   type MapBounds,
@@ -157,6 +164,58 @@ check('harvest', matching('harvest') === 1);
 check('trouble matches both needs_attention and diseased', matching('trouble') === 2);
 check('steward matches up-for-adoption', matching('steward') === 1);
 check("'all' keeps everything", matching('all') === 7);
+
+/*
+ * Panning — the map loads a margin around the screen, skips the request while
+ * the screen stays inside it, and snaps every request to a shared grid. Between
+ * them those are why a pan doesn't blank the map: pins are loaded before they
+ * are needed, and most moves ask for nothing at all.
+ */
+console.log('a fetch covers more than the screen');
+const screen: MapBounds = { minLng: 35.0, minLat: 32.51, maxLng: 35.02, maxLat: 32.53 };
+const loaded = padBounds(screen);
+check('the margin grows the box', boundsCover(loaded, screen));
+check(
+  'by the same fraction on each side',
+  Math.abs((screen.minLng - loaded.minLng) - (loaded.maxLng - screen.maxLng)) < 1e-9 &&
+    Math.abs((screen.minLat - loaded.minLat) - (loaded.maxLat - screen.maxLat)) < 1e-9
+);
+check(
+  'and by PAN_MARGIN of the width',
+  Math.abs((screen.minLng - loaded.minLng) - 0.02 * PAN_MARGIN) < 1e-9
+);
+
+console.log('panning inside the margin asks for nothing');
+/** The screen shifted east by a fraction of its own width. */
+const panned = (fraction: number): MapBounds => ({
+  ...screen,
+  minLng: screen.minLng + 0.02 * fraction,
+  maxLng: screen.maxLng + 0.02 * fraction,
+});
+check('a nudge is covered', boundsCover(loaded, panned(0.1)));
+check('a third of a screen is covered', boundsCover(loaded, panned(0.3)));
+check('a full margin is covered', boundsCover(loaded, panned(PAN_MARGIN)));
+check('past the margin is not', !boundsCover(loaded, panned(PAN_MARGIN + 0.05)));
+check('a whole screen away is not', !boundsCover(loaded, panned(1)));
+check('north out of the box is not', !boundsCover(loaded, { ...screen, minLat: 32.6, maxLat: 32.62 }));
+
+console.log('nearby viewports snap to the same request');
+const snapA = quantizeBounds(padBounds(screen), 17);
+const snapB = quantizeBounds(padBounds(panned(0.05)), 17);
+const snapFar = quantizeBounds(padBounds(panned(3)), 17);
+check('a small pan reuses the key', snapA === snapB);
+check('a large pan does not', snapA !== snapFar);
+check('the snapped box still covers the screen', boundsCover(snapBounds(padBounds(screen), 17), screen));
+
+console.log('the centre of a viewport');
+const mid = boundsCenter(screen);
+check('is the middle of an ordinary box', Math.abs(mid.lng - 35.01) < 1e-9 && Math.abs(mid.lat - 32.52) < 1e-9);
+const wrapped = normalizeBounds({ minLng: 179, minLat: -18.2, maxLng: 181, maxLat: -18 });
+const wrappedMid = boundsCenter(wrapped);
+check('and 180, not 0, for a box across the antimeridian', Math.abs(Math.abs(wrappedMid.lng) - 180) < 1e-9);
+check('a wrapped box covers itself', boundsCover(wrapped, wrapped));
+check('and contains a plant either side of the line', boundsContain(wrapped, { lat: -18.1, lng: 179.5 }) && boundsContain(wrapped, { lat: -18.1, lng: -179.5 }));
+check('but not one on the far side of the world', !boundsContain(wrapped, { lat: -18.1, lng: 0 }));
 
 /*
  * Districts — the plant count is regional rather than per-viewport, because a

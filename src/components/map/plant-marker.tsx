@@ -8,7 +8,7 @@ import { PlantImage } from '@/components/plant-art';
 import { ViewT } from '@/components/vt';
 import { IconDropFilled, IconBasketFilled, IconHeart, IconForward } from '@/components/icons';
 import { pinStatus } from '@/lib/plant-status';
-import type { PlantSummary } from '@/lib/types';
+import type { MapPlant } from '@/lib/types';
 
 export { pinStatus };
 
@@ -44,7 +44,7 @@ function PinIcon({ status, size }: { status: string; size: number }) {
  * for plants nobody has photographed yet. A small status badge always sits
  * on top so color/state stays scannable even over a photo.
  */
-function CollapsedPin({ plant }: { plant: PlantSummary }) {
+function CollapsedPin({ plant }: { plant: MapPlant }) {
   const status = pinStatus(plant);
   const color = STATUS_COLOR[status] ?? STATUS_COLOR.growing;
   const hasPhoto = Boolean(plant.latestPhotoUrl);
@@ -85,7 +85,7 @@ function CollapsedPin({ plant }: { plant: PlantSummary }) {
  * *not* a bottom sheet: the plant stays where it is, so tapping a pin never
  * hides the neighborhood behind a panel.
  */
-function OpenCard({ plant, href }: { plant: PlantSummary; href: string }) {
+function OpenCard({ plant, href }: { plant: MapPlant; href: string }) {
   const { dict } = useI18n();
 
   return (
@@ -120,7 +120,7 @@ export function PlantPin({
   selected,
   href,
 }: {
-  plant: PlantSummary;
+  plant: MapPlant;
   selected: boolean;
   href: string;
 }) {
