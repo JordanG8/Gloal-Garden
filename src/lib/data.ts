@@ -10,10 +10,7 @@ import {
   boundsCenter,
   CLUSTER_LIMIT,
   DISTRICT_REACH_M,
-  districtBounds,
-  districtTouches,
   expandBounds,
-  innermostDistricts,
   normalizeBounds,
   PIN_LIMIT,
   PIN_PRECISION,
@@ -21,7 +18,6 @@ import {
   roundCoord,
   splitAntimeridian,
   statusToCode,
-  type District,
   type MapBounds,
   type MapFilter,
   type MapPoint,
@@ -263,48 +259,47 @@ export async function getGardenData(
   }
 }
 
-/** Candidates to read before the exact circle test; the box test is indexed. */
+/** Candidates to consider before the exact circle test; the box test is indexed. */
 const DISTRICT_CANDIDATES = 64;
-/** How many districts one count query may name, so the SQL stays a sane size. */
+/** How many districts may feed the count, so one dense patch of cells can't. */
 const DISTRICT_LIMIT = 24;
+/** Metres per degree of latitude — the same figure `map-bounds.ts` uses. */
+const M_PER_DEG_LAT = 111320;
 
-/**
- * The districts this viewport is in range of.
- *
- * The box pre-filter is what keeps this off a sequential scan as grid cells
- * accumulate — `zones.geo` is GiST-indexed, and a circle's reach isn't
- * expressible as one. Zones wider than DISTRICT_REACH_M are therefore only
- * found once the viewport is wide enough to hold their centre, which is exactly
- * when they stop being too coarse to count against.
- */
-async function districtsInRange(bounds: MapBounds): Promise<District[]> {
-  const reach = expandBounds(bounds, DISTRICT_REACH_M);
-  const boxes = splitAntimeridian(reach).map(
-    (b) => sql`${zones.geo} <@ box(point(${b.minLng}, ${b.minLat}), point(${b.maxLng}, ${b.maxLat}))`
+/** `<@ box(...)` against an aliased geo column, OR'd across an antimeridian split. */
+function withinBoxes(geo: string, rawBounds: MapBounds): SQL {
+  const boxes = splitAntimeridian(normalizeBounds(rawBounds)).map(
+    (b) =>
+      sql`${sql.raw(geo)} <@ box(point(${b.minLng}, ${b.minLat}), point(${b.maxLng}, ${b.maxLat}))`
   );
-  const rows = await db
-    .select({ id: zones.id, lat: zones.lat, lng: zones.lng, radiusM: zones.radiusM })
-    .from(zones)
-    .where(boxes.length === 1 ? boxes[0] : or(...boxes)!)
-    // Widest first: if a dense patch of grid cells overruns the cap, keep the
-    // districts that account for the most ground.
-    .orderBy(desc(zones.radiusM))
-    .limit(DISTRICT_CANDIDATES);
-
-  const touching = rows.filter((district) => districtTouches(bounds, district));
-  return innermostDistricts(touching).slice(0, DISTRICT_LIMIT);
+  return boxes.length === 1 ? boxes[0] : or(...boxes)!;
 }
 
-/** Plants inside one district: indexed box first, then the exact circle. */
-function withinDistrict(district: District): SQL {
-  return and(
-    withinBounds(districtBounds(district)),
-    sql`(6371000 * acos(least(1, greatest(-1,
-      cos(radians(${plants.lat})) * cos(radians(${district.lat}))
-        * cos(radians(${district.lng}) - radians(${plants.lng}))
-      + sin(radians(${plants.lat})) * sin(radians(${district.lat}))
-    )))) <= ${district.radiusM}`
-  )!;
+/**
+ * Great-circle metres between two lat/lng expressions, by the spherical law of
+ * cosines — the same formula as `metersBetween` in map-bounds.ts, `zones.ts`
+ * and the nightly sweep, so every part of the app agrees where a district ends.
+ */
+function metersSql(aLat: string, aLng: string, bLat: SQL | string, bLng: SQL | string): SQL {
+  const [aLatR, aLngR] = [sql.raw(aLat), sql.raw(aLng)];
+  const [bLatR, bLngR] = [
+    typeof bLat === 'string' ? sql.raw(bLat) : bLat,
+    typeof bLng === 'string' ? sql.raw(bLng) : bLng,
+  ];
+  return sql`(6371000 * acos(least(1, greatest(-1,
+    cos(radians(${aLatR})) * cos(radians(${bLatR})) * cos(radians(${bLngR}) - radians(${aLngR}))
+    + sin(radians(${aLatR})) * sin(radians(${bLatR}))
+  ))))`;
+}
+
+/** Does a district's circle reach the viewport? Distance to the nearest point of the box. */
+function districtTouchesSql(rawBounds: MapBounds): SQL {
+  const parts = splitAntimeridian(normalizeBounds(rawBounds)).map((b) => {
+    const nearestLat = sql`least(greatest(z.lat, ${b.minLat}), ${b.maxLat})`;
+    const nearestLng = sql`least(greatest(z.lng, ${b.minLng}), ${b.maxLng})`;
+    return sql`${metersSql('z.lat', 'z.lng', nearestLat, nearestLng)} <= z.radius_m`;
+  });
+  return parts.length === 1 ? parts[0] : or(...parts)!;
 }
 
 /**
@@ -316,27 +311,102 @@ function withinDistrict(district: District): SQL {
  * districts on screen means the number holds still while you move around inside
  * a neighbourhood, and only changes when the neighbourhoods do.
  *
- * The viewport itself stays in the union for the cases districts can't cover:
- * open country between towns, a zoom level wider than any district in range,
- * and a database whose zones were never seeded — where this degrades to exactly
- * the old per-viewport count.
+ * One statement, because it used to be two and the second needed the first's
+ * answer — and on a serverless driver every query is its own HTTP round trip,
+ * so a dependent pair costs twice the latency of the read it runs beside.
  *
- * One `count(*)`, so overlapping districts can't count a plant twice.
+ * The three CTEs are the three rules:
+ *
+ *   in_range   districts whose circle reaches the screen. The box test comes
+ *              first because `zones.geo` is GiST-indexed and a circle's reach
+ *              is not; widest first, so if a dense patch of grid cells overruns
+ *              the cap the districts covering the most ground survive.
+ *   innermost  districts that don't swallow another one in range. Zones nest —
+ *              a plant in Givat Ada is also in the Haifa District and in Israel
+ *              — so without this a street-level view counts a country. Ties
+ *              between identical circles break on id, or they'd cancel out and
+ *              leave the viewport with no district at all.
+ *   counted    plant ids, `union`ed rather than OR'd in one WHERE, so each
+ *              branch keeps its own index scan and no plant is counted twice.
+ *              The viewport is a branch in its own right: it covers what
+ *              districts can't — open country between towns, a zoom wider than
+ *              anything in range, and a database whose zones were never seeded,
+ *              where this degrades to exactly the old per-viewport count.
  */
+export function regionCountStatement(bounds: MapBounds): SQL {
+  const reach = expandBounds(bounds, DISTRICT_REACH_M);
+  // Half-extents of a district's bounding box, in degrees. Longitude lines
+  // converge at the poles, hence the cosine; the floor stops a district at the
+  // pole dividing by ~zero. A circle that would wrap past ±180 widens to every
+  // longitude instead — over-including is free here, because the exact circle
+  // test below throws the extras back out, while clamping would silently cut
+  // off the far side of the antimeridian.
+  const dLat = sql.raw(`(z.radius_m / ${M_PER_DEG_LAT}.0)`);
+  const dLng = sql.raw(
+    `(z.radius_m / (${M_PER_DEG_LAT}.0 * greatest(0.01, cos(radians(z.lat)))))`
+  );
+
+  return sql`
+      with in_range as (
+        select z.id, z.lat, z.lng, z.radius_m
+        from ${zones} z
+        where ${withinBoxes('z.geo', reach)} and ${districtTouchesSql(bounds)}
+        order by z.radius_m desc
+        limit ${DISTRICT_CANDIDATES}
+      ),
+      innermost as (
+        select z.id, z.lat, z.lng, z.radius_m
+        from in_range z
+        where not exists (
+          select 1
+          from in_range inner_z
+          where inner_z.id <> z.id
+            and (inner_z.radius_m < z.radius_m
+                 or (inner_z.radius_m = z.radius_m and inner_z.id < z.id))
+            and ${metersSql('z.lat', 'z.lng', 'inner_z.lat', 'inner_z.lng')}
+                  + inner_z.radius_m <= z.radius_m
+        )
+        order by z.radius_m desc
+        limit ${DISTRICT_LIMIT}
+      ),
+      counted as (
+        select p.id
+        from ${plants} p
+        where p.status <> 'removed' and ${withinBoxes('p.geo', bounds)}
+        union
+        select p.id
+        from innermost z
+        cross join lateral (
+          select
+            case when abs(z.lng) + ${dLng} > 180 then -180 else z.lng - ${dLng} end as west,
+            case when abs(z.lng) + ${dLng} > 180 then  180 else z.lng + ${dLng} end as east,
+            greatest(-90, z.lat - ${dLat}) as south,
+            least(90, z.lat + ${dLat}) as north
+        ) reach
+        join ${plants} p
+          on p.geo <@ box(point(reach.west, reach.south), point(reach.east, reach.north))
+        where p.status <> 'removed'
+          and ${metersSql('p.lat', 'p.lng', 'z.lat', 'z.lng')} <= z.radius_m
+      )
+      select count(*)::int as n from counted
+    `;
+}
+
+/**
+ * `db.execute` hands back the driver's own shape: an array of rows on
+ * neon-http, a pg `Result` on node-postgres. Which client is in play is decided
+ * at runtime from the connection string, so accept either.
+ */
+export function firstRow<T>(result: unknown): T | undefined {
+  const rows = Array.isArray(result) ? result : (result as { rows?: unknown[] })?.rows;
+  return rows?.[0] as T | undefined;
+}
+
 export async function getRegionCount(bounds: MapBounds): Promise<number> {
   await connection();
   try {
-    const districts = await districtsInRange(bounds);
-    const [row] = await db
-      .select({ n: count() })
-      .from(plants)
-      .where(
-        and(
-          ne(plants.status, 'removed'),
-          or(withinBounds(bounds), ...districts.map(withinDistrict))
-        )
-      );
-    return Number(row?.n ?? 0);
+    const result = await db.execute(regionCountStatement(bounds));
+    return Number(firstRow<{ n: number | string }>(result)?.n ?? 0);
   } catch (error) {
     rethrowIfPrerenderAbort(error);
     console.error('Failed to count the region:', error);

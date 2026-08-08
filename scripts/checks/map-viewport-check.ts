@@ -17,11 +17,6 @@ import {
   boundsContain,
   boundsCover,
   boundsToParam,
-  districtBounds,
-  districtTouches,
-  expandBounds,
-  innermostDistricts,
-  metersBetween,
   normalizeBounds,
   padBounds,
   parseBounds,
@@ -31,10 +26,8 @@ import {
   splitAntimeridian,
   statusToCode,
   tierForZoom,
-  DISTRICT_REACH_M,
   PAN_MARGIN,
   PIN_ZOOM,
-  type District,
   type MapBounds,
   type MapPoint,
 } from '../../src/lib/map-bounds';
@@ -216,108 +209,6 @@ check('and 180, not 0, for a box across the antimeridian', Math.abs(Math.abs(wra
 check('a wrapped box covers itself', boundsCover(wrapped, wrapped));
 check('and contains a plant either side of the line', boundsContain(wrapped, { lat: -18.1, lng: 179.5 }) && boundsContain(wrapped, { lat: -18.1, lng: -179.5 }));
 check('but not one on the far side of the world', !boundsContain(wrapped, { lat: -18.1, lng: 0 }));
-
-/*
- * Districts — the plant count is regional rather than per-viewport, because a
- * count of what's strictly on screen falls as you zoom in, which reads as
- * plants disappearing rather than as the camera narrowing.
- *
- * Geometry from migration 0012: a neighbourhood sits inside a district, which
- * sits inside the country.
- */
-const givatAdaZone: District = { id: 7, lat: 32.5185, lng: 35.0047, radiusM: 3000 };
-const binyaminaZone: District = { id: 8, lat: 32.515, lng: 34.949, radiusM: 3500 };
-const haifaDistrict: District = { id: 2, lat: 32.6, lng: 35.0, radiusM: 45000 };
-const israel: District = { id: 1, lat: 31.4, lng: 35.0, radiusM: 250000 };
-const seeded = [givatAdaZone, binyaminaZone, haifaDistrict, israel];
-
-/** What `districtsInRange` does once the database has handed over candidates. */
-const inRange = (bounds: MapBounds, candidates = seeded): District[] =>
-  innermostDistricts(candidates.filter((d) => districtTouches(bounds, d)));
-
-/** A square viewport of roughly this many degrees, centred on a district. */
-const viewOf = (d: District, degrees: number): MapBounds => ({
-  minLng: d.lng - degrees / 2,
-  maxLng: d.lng + degrees / 2,
-  minLat: d.lat - degrees / 2,
-  maxLat: d.lat + degrees / 2,
-});
-
-console.log('distance is measured the short way round');
-check('Givat Ada to Binyamina is about 5 km', Math.abs(metersBetween(givatAdaZone, binyaminaZone) - 5200) < 400);
-check(
-  'either side of the antimeridian is 2 degrees apart, not 358',
-  metersBetween({ lat: 0, lng: 179 }, { lat: 0, lng: -179 }) < 250000
-);
-
-console.log('a district covers the same ground however far you zoom in');
-// The bug this replaced: the chip counted the viewport, so every zoom step in
-// threw plants out of the number. Zooming in leaves the district untouched.
-const zooms = [0.05, 0.01, 0.002, 0.0004, 0.00005];
-const zoomedIn = zooms.map((degrees) => inRange(viewOf(givatAdaZone, degrees)));
-check(
-  'the district you are inside is in range at every zoom',
-  zoomedIn.every((list) => list.some((d) => d.id === givatAdaZone.id))
-);
-check(
-  'and from a street down to a single garden it is the only one',
-  zoomedIn.slice(1).every((list) => list.length === 1 && list[0].id === givatAdaZone.id)
-);
-check(
-  'a wider view reaches further, rather than the other way round',
-  zoomedIn[0].length > zoomedIn[1].length
-);
-
-console.log('the widest district in range never swallows the ones inside it');
-check('a street view drops the region and the country', inRange(viewOf(givatAdaZone, 0.01)).length === 1);
-check(
-  'the region alone is kept when nothing smaller is in range',
-  inRange({ minLng: 35.2, maxLng: 35.25, minLat: 32.75, maxLat: 32.8 }).map((d) => d.id).join() ===
-    String(haifaDistrict.id)
-);
-check(
-  'neighbouring towns both survive — overlapping circles are fine',
-  inRange({ minLng: 34.94, maxLng: 35.01, minLat: 32.5, maxLat: 32.53 })
-    .map((d) => d.id)
-    .sort()
-    .join() === [givatAdaZone.id, binyaminaZone.id].sort().join()
-);
-const twins: District[] = [
-  { id: 3, lat: 32.5, lng: 35, radiusM: 4000 },
-  { id: 4, lat: 32.5, lng: 35, radiusM: 4000 },
-];
-check(
-  'identical districts do not cancel each other out',
-  innermostDistricts(twins).length === 1
-);
-
-console.log('a viewport only reaches districts near it');
-const street = viewOf(givatAdaZone, 0.01);
-const reach = expandBounds(street, DISTRICT_REACH_M);
-const holds = (b: MapBounds, p: { lat: number; lng: number }) =>
-  p.lng >= b.minLng && p.lng <= b.maxLng && p.lat >= b.minLat && p.lat <= b.maxLat;
-check('the neighbourhood is a candidate', holds(reach, givatAdaZone));
-check('so is the district whose centre is 9 km away', holds(reach, haifaDistrict));
-check('the country, 120 km away, is not', !holds(reach, israel));
-check(
-  'and the reach only ever grows the viewport',
-  reach.minLat < street.minLat &&
-    reach.maxLat > street.maxLat &&
-    reach.minLng < street.minLng &&
-    reach.maxLng > street.maxLng
-);
-
-console.log('a district box contains its circle');
-const box = districtBounds(givatAdaZone);
-check('the centre is inside', holds(box, givatAdaZone));
-check(
-  'and so is the northern edge of the circle',
-  box.maxLat >= givatAdaZone.lat + givatAdaZone.radiusM / 111320
-);
-check(
-  'a viewport outside the circle does not touch it',
-  !districtTouches({ minLng: 35.1, maxLng: 35.12, minLat: 32.6, maxLat: 32.62 }, givatAdaZone)
-);
 
 console.log('');
 if (failures > 0) {
