@@ -83,13 +83,20 @@ export function WelcomePager({ locale, stats }: { locale: string; stats: ReactNo
             {stats}
 
             <div className="flex flex-col gap-3 pb-2">
-              <button
-                type="button"
-                onClick={() => setPage(1)}
-                className="w-full rounded-full bg-gold py-[17px] text-center text-[16px] font-bold text-[#1D1607] transition active:scale-[0.985]"
+              {/*
+                Straight to signup rather than sliding to 1.2. The slider is
+                broken in RTL — `--dir` is declared on an unlayered `:root` and
+                overridden inside `@layer base`, so the unlayered `1` always
+                wins and a Hebrew visitor gets translated away from both
+                screens onto blank space. Temporary: 1.2 is still reachable
+                once that cascade bug is fixed.
+              */}
+              <Link
+                href={`/${locale}/signup`}
+                className="block w-full rounded-full bg-gold py-[17px] text-center text-[16px] font-bold text-[#1D1607] transition active:scale-[0.985]"
               >
                 {dict.welcome.getStarted}
-              </button>
+              </Link>
               <Link
                 href={`/${locale}/login`}
                 className="w-full rounded-full border-[1.5px] border-cream/30 py-[15px] text-center text-[15px] font-semibold text-cream transition hover:bg-cream/5 active:scale-[0.985]"
