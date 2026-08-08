@@ -32,11 +32,15 @@ const DEBOUNCE_MS = 120;
 /** Quantized viewports we've already fetched. Panning back is free. */
 const CACHE_LIMIT = 40;
 /**
- * How many pins may be held at once. Merging keeps plants from previous
- * viewports on screen, so without a ceiling a long pan would accumulate every
- * plant it ever walked past. Comfortably above one screenful plus its margin.
+ * How many pins may be held at once — twice the server's per-request cap.
+ *
+ * Merging keeps plants from previous viewports, so without a ceiling a long pan
+ * would accumulate every plant it ever walked past. That matters more than
+ * memory: each pin is a real DOM marker that MapLibre repositions every frame,
+ * so an unbounded set would cost exactly the smoothness the margin is here to
+ * buy. Two screenfuls of history, then the furthest fall off the end.
  */
-const PLANT_CAP = 600;
+const PLANT_CAP = 400;
 
 interface Payload {
   tier: 'pins' | 'cluster';
