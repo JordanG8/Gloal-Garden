@@ -4,7 +4,7 @@
 
 /* ---------------------------------------------------------------------------
    Grove design system — forest green, cream, harvest gold and soil brown.
-   Big condensed numbers (Barlow Condensed / Karantina for Hebrew), Instrument
+   Big condensed numbers (Barlow Condensed / Rubik for Hebrew), Instrument
    Sans / Heebo for UI copy. Gold is reserved for karma & achievement.
 --------------------------------------------------------------------------- */
 
@@ -58,7 +58,7 @@
   --color-ring: #17402b;
 
   --font-sans: var(--font-instrument), var(--font-heebo), system-ui, sans-serif;
-  --font-display: var(--font-barlow), var(--font-karantina), var(--font-instrument), sans-serif;
+  --font-display: var(--font-barlow), var(--font-rubik), var(--font-instrument), sans-serif;
 
   --radius-sm: 10px;
   --radius-md: 14px;
